@@ -5,6 +5,8 @@ services:
       POSTGRES_USER: strait
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set in .env}
       POSTGRES_DB: strait
+    ports:
+      - "127.0.0.1:5434:5432"
     volumes:
       - dbdata:/var/lib/postgresql/data
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro

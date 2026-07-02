@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "npm run dev:db && concurrently -k -n ingest,worker -c blue,green \"node --watch --env-file=.env src/ingest.js\" \"node --watch --env-file=.env src/worker.js\"",
+    "dev:db": "docker compose up -d --wait db",
     "ingest": "node src/ingest.js",
     "worker": "node src/worker.js",
     "test": "node --test test/*.test.js"
@@ -11,5 +13,8 @@
   "dependencies": {
     "pg": "^8.13.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   }
 }

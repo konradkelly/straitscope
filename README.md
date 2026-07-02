@@ -16,6 +16,20 @@ docker compose logs -f ingest
 Positions start landing in `vessel_positions` within seconds. The worker
 detects completed transits every 5 minutes.
 
+## Local development
+
+```bash
+cp .env.example .env      # fill in AISSTREAM_API_KEY, DB_PASSWORD, DATABASE_URL
+npm install
+npm run dev                # starts the db in Docker, runs ingest+worker on the host
+```
+
+`npm run dev` starts only the `db` container (via `docker compose up -d --wait
+db`, published on `localhost:5434` since 5432 is often taken by a local
+Postgres install) and runs `src/ingest.js` / `src/worker.js` directly with
+`node --watch`, restarting on save. Faster than rebuilding Docker images for
+every change.
+
 ## Run tests
 
 ```bash
