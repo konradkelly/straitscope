@@ -4,7 +4,7 @@ Real-time monitoring dashboard for vessel traffic through the Strait of Hormuz, 
 
 **Author:** Konrad Kelly
 **Status:** Draft v1
-**Last updated:** 2026-07-01
+**Last updated:** 2026-07-02
 
 ---
 
@@ -226,7 +226,8 @@ Static SPA (Vite + React or plain Vite + vanilla — builder's choice; no SSR).
 
 ## 9. Infrastructure & Operations
 
-- **Terraform:** VPC-lite (default VPC acceptable), one EC2 instance, security group (80/443 + SSH from admin IP), Elastic IP, Route 53 records. State in S3 backend.
+- **Terraform:** VPC-lite (default VPC acceptable), one EC2 instance, security group (80/443 + SSH from admin IP), Elastic IP, Route 53 hosted zone + records. State in S3 backend.
+- **DNS:** domain is registered at Hostinger; Hostinger stays the registrar. DNS resolution is delegated to a Route 53 hosted zone (Hostinger's nameservers repointed to Route 53's 4 NS records), so all records (A/CNAME for the app, anything else needed later) live in Terraform state alongside the rest of the infra rather than being managed by hand at the registrar. Do this delegation *before* the first deploy — Caddy's Let's Encrypt cert issuance validates over HTTP against live DNS, so a stale or unpropagated record will fail the cert request.
 - **CI/CD (GitHub Actions):**
   - PR: lint + unit tests (transit state machine and point-in-polygon get real tests — they're the correctness core).
   - `main`: build Docker images → push to GHCR → SSH deploy → `docker compose up -d` → smoke-check `/healthz`.
