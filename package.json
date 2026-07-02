@@ -9,7 +9,8 @@
     "ingest": "node src/ingest.js",
     "worker": "node src/worker.js",
     "api": "node src/api.js",
-    "test": "node --test test/"
+    "test": "node --test test/",
+    "export-tracks": "node --env-file=.env tools/export-tracks.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

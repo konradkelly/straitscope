@@ -47,11 +47,15 @@ npm test
 
 ## Before launch (do not skip)
 
-1. **Calibrate geometry** — the gate lines and corridor polygons in
-   `src/geo.js` are placeholders. Collect a few days of positions, plot the
-   tracks, and trace the real lanes. Spec §6 explains why this matters.
-2. Add the not-for-navigation disclaimer to the frontend (spec §8).
-3. Sanity-check daily transit counts against published figures.
+- [ ] **Calibrate geometry** — the gate lines and corridor polygons in
+   `src/geo.js` are placeholders (this is why the map's corridor overlays
+   currently spill onto land in places). Collect a few days of positions,
+   then run `npm run export-tracks -- 3 tracks > tracks.geojson` and paste
+   the result into [geojson.io](https://geojson.io) to see where vessels
+   actually travel; redraw `GATES`/`CORRIDORS` in `src/geo.js` to match.
+   Spec §6 explains why this matters.
+- [x] Add the not-for-navigation disclaimer to the frontend (spec §8).
+- [ ] Sanity-check daily transit counts against published figures.
 
 ## Roadmap
 
