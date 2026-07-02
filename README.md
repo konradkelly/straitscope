@@ -9,26 +9,34 @@ Real-time Strait of Hormuz vessel traffic monitor with route-split classificatio
 
 ```bash
 cp .env.example .env      # add your free aisstream.io API key + a db password
-docker compose up -d      # db + ingest + worker
+docker compose up -d      # db + ingest + worker + api
 docker compose logs -f ingest
 ```
 
 Positions start landing in `vessel_positions` within seconds. The worker
-detects completed transits every 5 minutes.
+detects completed transits every 5 minutes. The API is served at
+`http://localhost:8080` (see `spec.md` §7 for endpoints).
 
 ## Local development
 
 ```bash
 cp .env.example .env      # fill in AISSTREAM_API_KEY, DB_PASSWORD, DATABASE_URL
 npm install
-npm run dev                # starts the db in Docker, runs ingest+worker on the host
+npm run dev                # starts the db in Docker, runs ingest+worker+api on the host
+
+cd web && npm install && npm run dev   # frontend, separate terminal
 ```
 
 `npm run dev` starts only the `db` container (via `docker compose up -d --wait
 db`, published on `localhost:5434` since 5432 is often taken by a local
-Postgres install) and runs `src/ingest.js` / `src/worker.js` directly with
-`node --watch`, restarting on save. Faster than rebuilding Docker images for
-every change.
+Postgres install) and runs `src/ingest.js`, `src/worker.js`, and `src/api.js`
+directly with `node --watch`, restarting on save. Faster than rebuilding
+Docker images for every change.
+
+The frontend (`web/`) is a separate Vite project. Its dev server
+(`http://localhost:5173`) proxies `/api/*` and `/healthz` to the API on
+`:8080`, so both need to be running locally. `npm run build` inside `web/`
+produces a static `web/dist/` deployable behind any static host.
 
 ## Run tests
 
@@ -48,7 +56,7 @@ npm test
 ## Roadmap
 
 - [x] M1 Ingest + schema
-- [ ] M2 Transit detection + dark-vessel detection done, unit tested ← you are here (calibration soak still needed)
-- [ ] M3 API (`src/api.js`) + map frontend (`web/`)
+- [x] M2 Transit detection + dark-vessel detection, unit tested (calibration soak still needed)
+- [x] M3 API (`src/api.js`) + map frontend (`web/`) ← you are here (not yet deployed behind a domain/TLS)
 - [ ] M4 Terraform + GitHub Actions + monitoring
 - [ ] M5 Launch

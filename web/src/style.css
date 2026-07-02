@@ -1,0 +1,278 @@
+:root {
+  --surface-1: #fcfcfb;
+  --page-plane: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+
+  --series-1: #2a78d6; /* northern / tanker */
+  --series-2: #1baf7a; /* southern / cargo */
+  --series-3: #eda100; /* mixed / other */
+  --critical: #d03b3b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --page-plane: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --gridline: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+
+    --series-1: #3987e5;
+    --series-2: #199e70;
+    --series-3: #c98500;
+    --critical: #e66767;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page-plane);
+  color: var(--text-primary);
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--series-1);
+  color: #fff;
+  padding: 10px 20px;
+}
+.banner p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.banner button {
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.page-header {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 20px 8px;
+}
+.page-header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.stat-tile {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+.split-n { color: var(--series-1); }
+.split-s { color: var(--series-2); }
+
+section[aria-label] > h2,
+.section-head h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 28px 0 10px;
+}
+.section-controls {
+  display: flex;
+  gap: 14px;
+}
+.toggle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#map {
+  height: 420px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.maplibregl-popup-content {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.85rem;
+}
+
+#chart-section {
+  position: relative;
+}
+#chart {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+#chart svg text {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.chart-legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--text-primary);
+  color: var(--surface-1);
+  font-size: 0.78rem;
+  padding: 6px 9px;
+  border-radius: 5px;
+  transform: translate(-50%, -110%);
+  white-space: nowrap;
+}
+.link-button {
+  background: none;
+  border: none;
+  color: var(--series-1);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+table.chart-data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+table.chart-data th,
+table.chart-data td {
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--gridline);
+}
+table.chart-data th:first-child,
+table.chart-data td:first-child {
+  text-align: left;
+}
+
+#incidents-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.incident {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text-muted);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.incident-attack, .incident-seizure { border-left-color: var(--critical); }
+.incident-grounding { border-left-color: var(--series-3); }
+.incident-info { border-left-color: var(--series-1); }
+.incident-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+.incident-severity {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.incident h3 {
+  margin: 4px 0 4px;
+  font-size: 0.95rem;
+}
+.incident p {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+.incident a {
+  font-size: 0.8rem;
+}
+.incident-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.page-footer {
+  max-width: 1080px;
+  margin: 20px auto 0;
+  padding: 20px 20px 40px;
+  border-top: 1px solid var(--gridline);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.page-footer p {
+  margin: 4px 0;
+}
+.page-footer a {
+  color: var(--text-secondary);
+}
+.disclaimer {
+  font-style: italic;
+}

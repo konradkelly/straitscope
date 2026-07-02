@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Strait Tracker — Strait of Hormuz vessel traffic</title>
+</head>
+<body>
+  <div id="disclaimer-banner" class="banner" hidden>
+    <p>
+      <strong>Not for navigation.</strong> Positions come from volunteer terrestrial AIS
+      receivers and may be delayed, incomplete, or spoofed. Transit counts are estimates.
+    </p>
+    <button id="banner-dismiss" type="button">Got it</button>
+  </div>
+
+  <header class="page-header">
+    <h1>Strait Tracker</h1>
+    <p class="subtitle">Vessel traffic through the Strait of Hormuz</p>
+  </header>
+
+  <main>
+    <section id="headline" class="stat-row" aria-label="Headline stats">
+      <div class="stat-tile" id="stat-today">
+        <span class="stat-label">Today's transits</span>
+        <span class="stat-value">—</span>
+      </div>
+      <div class="stat-tile" id="stat-avg">
+        <span class="stat-label">7-day average</span>
+        <span class="stat-value">—</span>
+      </div>
+      <div class="stat-tile" id="stat-split">
+        <span class="stat-label">Route split (7d)</span>
+        <span class="stat-value">—</span>
+      </div>
+      <div class="stat-tile" id="stat-dark">
+        <span class="stat-label">Gone dark (24h)</span>
+        <span class="stat-value">—</span>
+      </div>
+    </section>
+
+    <section id="map-section" aria-label="Live vessel map">
+      <div class="section-head">
+        <h2>Live vessel positions</h2>
+        <div class="section-controls">
+          <label class="toggle"><input type="checkbox" id="toggle-corridors" checked /> Corridors</label>
+          <label class="toggle"><input type="checkbox" id="toggle-gates" checked /> Gates</label>
+        </div>
+      </div>
+      <div id="map"></div>
+    </section>
+
+    <section id="chart-section" aria-label="Daily transit chart">
+      <div class="section-head">
+        <h2>Daily transits (30 days)</h2>
+        <button id="chart-table-toggle" type="button" class="link-button">View as table</button>
+      </div>
+      <div id="chart"></div>
+      <div id="chart-table" hidden></div>
+    </section>
+
+    <section id="incidents-section" aria-label="Incident timeline">
+      <h2>Incident timeline</h2>
+      <ul id="incidents-list"></ul>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <p>
+      Data: <a href="https://aisstream.io" target="_blank" rel="noopener">AISStream.io</a>
+      (volunteer terrestrial AIS receivers).
+      <a href="https://github.com/konradkelly/straitscope/blob/main/spec.md" target="_blank" rel="noopener">Methodology</a>.
+    </p>
+    <p class="disclaimer">
+      Not for navigation. Positions may be delayed, incomplete, or spoofed. Transit counts are estimates.
+    </p>
+  </footer>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
