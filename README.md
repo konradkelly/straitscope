@@ -47,8 +47,8 @@ npm test
 
 ## Roadmap
 
-- [ ] M1 Ingest + schema ← you are here
-- [ ] M2 Transit detection calibration soak
+- [x] M1 Ingest + schema
+- [ ] M2 Transit detection + dark-vessel detection done, unit tested ← you are here (calibration soak still needed)
 - [ ] M3 API (`src/api.js`) + map frontend (`web/`)
 - [ ] M4 Terraform + GitHub Actions + monitoring
 - [ ] M5 Launch

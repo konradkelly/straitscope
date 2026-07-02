@@ -67,8 +67,25 @@ CREATE TABLE IF NOT EXISTS transit_state (
     last_time       TIMESTAMPTZ,
     northern_count  INT NOT NULL DEFAULT 0,         -- in-strait corridor tallies
     southern_count  INT NOT NULL DEFAULT 0,
-    total_count     INT NOT NULL DEFAULT 0
+    total_count     INT NOT NULL DEFAULT 0,
+    last_sog        REAL,                           -- sog at last position (spec §6.4 dark check)
+    dark_flagged    BOOLEAN NOT NULL DEFAULT false   -- true once current silence has been logged
 );
+
+-- ---------------------------------------------------------------------------
+-- Dark-vessel events (spec §6.4): a moving vessel (sog > 1 kn) goes silent
+-- for > 6h without having exited via a gate. Logged once per occurrence (not
+-- continuously re-logged) so historical daily counts stay accurate even
+-- after transit_state later resets.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS dark_events (
+    id            BIGSERIAL PRIMARY KEY,
+    mmsi          BIGINT NOT NULL,
+    last_seen_at  TIMESTAMPTZ NOT NULL,   -- last position before going quiet
+    detected_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dark_events_detected ON dark_events (detected_at DESC);
 
 -- Watermark so the worker processes each position batch exactly once.
 CREATE TABLE IF NOT EXISTS worker_watermark (

@@ -8,7 +8,7 @@
     "dev:db": "docker compose up -d --wait db",
     "ingest": "node src/ingest.js",
     "worker": "node src/worker.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/"
   },
   "dependencies": {
     "pg": "^8.13.0",
