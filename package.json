@@ -1,0 +1,15 @@
+{
+  "name": "strait-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ingest": "node src/ingest.js",
+    "worker": "node src/worker.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.0",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,11 @@
+# Curated incident timeline — add entries via PR.
+# severity: info | attack | grounding | seizure
+#
+# - date: 2026-07-01
+#   title: Container ship runs aground on unapproved route
+#   summary: Iranian state TV reported a foreign container ship ran aground
+#     after not following the approved route. No independent confirmation yet.
+#   lat: 26.4
+#   lon: 56.5
+#   severity: grounding
+#   source_url: https://example.com/replace-with-real-source
