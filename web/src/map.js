@@ -15,14 +15,6 @@ export function initMap(container) {
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
   map.on('load', () => {
-    map.addSource('gates', { type: 'geojson', data: gatesGeoJSON() });
-    map.addLayer({
-      id: 'gates',
-      type: 'line',
-      source: 'gates',
-      paint: { 'line-color': '#d03b3b', 'line-width': 2, 'line-dasharray': [2, 2] },
-    });
-
     map.addSource('corridors', { type: 'geojson', data: corridorsGeoJSON() });
     map.addLayer({
       id: 'corridors-fill',
@@ -35,6 +27,18 @@ export function initMap(container) {
       type: 'line',
       source: 'corridors',
       paint: { 'line-color': ROUTE_COLOR, 'line-width': 1.5 },
+    });
+
+    // Gates are added after corridors so their tripwire lines render on top
+    // — the placeholder gate coordinates currently sit on the corridor
+    // polygons' own west/east edges (spec §6.1/§6.3), so drawn underneath
+    // they'd be fully hidden by the opaque corridor outline.
+    map.addSource('gates', { type: 'geojson', data: gatesGeoJSON() });
+    map.addLayer({
+      id: 'gates',
+      type: 'line',
+      source: 'gates',
+      paint: { 'line-color': '#d03b3b', 'line-width': 2, 'line-dasharray': [2, 2] },
     });
 
     map.addSource('incidents', { type: 'geojson', data: emptyFC() });
