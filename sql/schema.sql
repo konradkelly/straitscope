@@ -109,7 +109,7 @@ SELECT
     count(DISTINCT mmsi) AS distinct_vessels
 FROM transits
 GROUP BY 1, 2, 3
-WITH NO DATA;
+WITH DATA;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_stats
     ON daily_stats (day, direction, route);
