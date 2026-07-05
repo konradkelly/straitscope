@@ -4,22 +4,6 @@ resource "aws_security_group" "app" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "SSH from admin"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.admin_ip_cidr]
-  }
-
-  ingress {
-    description = "SSH from anywhere (CI/CD deploy runners have no stable IP range)"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
     description = "HTTP (redirect to HTTPS + ACME HTTP-01 challenge)"
     from_port   = 80
     to_port     = 80
