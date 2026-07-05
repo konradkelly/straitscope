@@ -68,7 +68,8 @@ jobs:
 
       - name: Write server .env
         run: |
-          cat > /tmp/deploy.env <<EOF
+          mkdir -p tmp
+          cat > tmp/deploy.env <<EOF
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           AISSTREAM_API_KEY=${{ secrets.AISSTREAM_API_KEY }}
           EOF
@@ -89,7 +90,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: /tmp/deploy.env
+          source: tmp/deploy.env
           target: /opt/straitscope
 
       - name: Deploy over SSH
