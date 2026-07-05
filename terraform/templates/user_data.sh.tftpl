@@ -5,8 +5,17 @@
 # `docker compose up -d` on the box) -- this script only prepares the host.
 set -euxo pipefail
 
+export DEBIAN_FRONTEND=noninteractive
+
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg debian-keyring debian-archive-keyring apt-transport-https
+apt-get install -y ca-certificates curl gnupg debian-keyring debian-archive-keyring apt-transport-https unzip
+
+# AWS CLI v2 -- the deploy script pulled down via SSM needs this to fetch
+# release artifacts from S3 (not preinstalled on the base Ubuntu AMI).
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+unzip -o /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install
+rm -rf /tmp/awscliv2.zip /tmp/aws
 
 # SSM Agent: the Canonical AMI ships this as a pre-installed snap, but
 # don't assume it's enabled -- this is the only admin/deploy access path
