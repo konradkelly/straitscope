@@ -95,6 +95,7 @@ jobs:
           COMMANDS=$(jq -n --arg prefix "$PREFIX" --arg tag "${{ github.sha }}" \
             --arg token "${{ secrets.GITHUB_TOKEN }}" --arg actor "${{ github.actor }}" '
             [
+              "#!/bin/bash",
               "set -euo pipefail",
               "mkdir -p /opt/straitscope/sql /opt/straitscope/data /opt/straitscope/web/dist",
               "cd /opt/straitscope",
