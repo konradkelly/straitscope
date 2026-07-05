@@ -1,27 +1,37 @@
-const ROUTE_COLOR = { northern: '#2a78d6', southern: '#1baf7a', mixed: '#eda100' };
-const ROUTE_ORDER = ['northern', 'southern', 'mixed'];
-const ROUTE_LABEL = { northern: 'Northern', southern: 'Southern', mixed: 'Mixed' };
+// Known route names get a fixed, meaningful color; anything else (a region's
+// own corridor vocabulary, e.g. singapore's 'unclassified') falls back to
+// this rotating palette so the chart still renders sensibly.
+const KNOWN_ROUTE_COLOR = { northern: '#2a78d6', southern: '#1baf7a', mixed: '#eda100' };
+const FALLBACK_PALETTE = ['#eda100', '#7a5ea8', '#d0596b', '#3aa6a0'];
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+function routeLabel(route) {
+  return route.charAt(0).toUpperCase() + route.slice(1);
+}
+
 function aggregateByDay(rows) {
+  const routes = [...new Set(rows.map((r) => r.route))];
   const byDay = new Map();
   for (const r of rows) {
     const day = String(r.day).slice(0, 10);
-    const entry = byDay.get(day) ?? { day, northern: 0, southern: 0, mixed: 0 };
+    const entry = byDay.get(day) ?? Object.fromEntries([['day', day], ...routes.map((rt) => [rt, 0])]);
     entry[r.route] = (entry[r.route] ?? 0) + Number(r.transit_count);
     byDay.set(day, entry);
   }
-  return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+  return { data: [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day)), routes };
 }
 
 export function renderChart(chartEl, tableEl, rows) {
-  const data = aggregateByDay(rows);
-  renderSvg(chartEl, data);
-  renderLegend(chartEl, data);
-  renderTable(tableEl, data);
+  const { data, routes } = aggregateByDay(rows);
+  const routeColor = Object.fromEntries(
+    routes.map((r, i) => [r, KNOWN_ROUTE_COLOR[r] ?? FALLBACK_PALETTE[i % FALLBACK_PALETTE.length]])
+  );
+  renderSvg(chartEl, data, routes, routeColor);
+  renderLegend(chartEl, routes, routeColor);
+  renderTable(tableEl, data, routes);
 }
 
-function renderSvg(container, data) {
+function renderSvg(container, data, routes, routeColor) {
   container.querySelectorAll('svg, .chart-tooltip, .chart-legend').forEach((el) => el.remove());
 
   if (data.length === 0) {
@@ -37,7 +47,7 @@ function renderSvg(container, data) {
   const marginTop = 10;
   const marginBottom = 26;
   const plotH = height - marginTop - marginBottom;
-  const maxTotal = Math.max(1, ...data.map((d) => d.northern + d.southern + d.mixed));
+  const maxTotal = Math.max(1, ...data.map((d) => routes.reduce((sum, r) => sum + d[r], 0)));
   const barSlot = width / data.length;
   const barW = Math.min(24, Math.max(2, barSlot - 2));
 
@@ -76,7 +86,7 @@ function renderSvg(container, data) {
   data.forEach((d, i) => {
     const x = i * barSlot + (barSlot - barW) / 2;
     let yCursor = plotH + marginTop;
-    const presentRoutes = ROUTE_ORDER.filter((r) => d[r] > 0);
+    const presentRoutes = routes.filter((r) => d[r] > 0);
 
     presentRoutes.forEach((route, ri) => {
       const val = d[route];
@@ -89,7 +99,7 @@ function renderSvg(container, data) {
       rect.setAttribute('y', String(yCursor - segH));
       rect.setAttribute('width', String(barW));
       rect.setAttribute('height', String(drawH));
-      rect.setAttribute('fill', ROUTE_COLOR[route]);
+      rect.setAttribute('fill', routeColor[route]);
       rect.setAttribute('rx', isTop ? '4' : '0');
       rect.style.cursor = 'pointer';
 
@@ -98,7 +108,7 @@ function renderSvg(container, data) {
         tooltip.hidden = false;
         tooltip.style.left = `${evt.clientX - box.left}px`;
         tooltip.style.top = `${evt.clientY - box.top}px`;
-        tooltip.textContent = `${d.day} · ${ROUTE_LABEL[route]}: ${val}`;
+        tooltip.textContent = `${d.day} · ${routeLabel(route)}: ${val}`;
       });
       rect.addEventListener('mouseleave', () => {
         tooltip.hidden = true;
@@ -124,34 +134,36 @@ function renderSvg(container, data) {
   container.append(svg, tooltip);
 }
 
-function renderLegend(container, data) {
+function renderLegend(container, routes, routeColor) {
   const legend = document.createElement('div');
   legend.className = 'chart-legend';
-  for (const route of ROUTE_ORDER) {
+  for (const route of routes) {
     const item = document.createElement('span');
     const swatch = document.createElement('span');
     swatch.className = 'swatch';
-    swatch.style.background = ROUTE_COLOR[route];
-    item.append(swatch, document.createTextNode(ROUTE_LABEL[route]));
+    swatch.style.background = routeColor[route];
+    item.append(swatch, document.createTextNode(routeLabel(route)));
     legend.appendChild(item);
   }
   container.appendChild(legend);
 }
 
-function renderTable(container, data) {
+function renderTable(container, data, routes) {
   container.replaceChildren();
   const table = document.createElement('table');
   table.className = 'chart-data';
 
   const thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>Day</th><th>Northern</th><th>Southern</th><th>Mixed</th><th>Total</th></tr>';
+  const headCells = ['Day', ...routes.map(routeLabel), 'Total'].map((h) => `<th>${h}</th>`).join('');
+  thead.innerHTML = `<tr>${headCells}</tr>`;
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
   for (const d of data) {
     const tr = document.createElement('tr');
-    const total = d.northern + d.southern + d.mixed;
-    tr.innerHTML = `<td>${d.day}</td><td>${d.northern}</td><td>${d.southern}</td><td>${d.mixed}</td><td>${total}</td>`;
+    const total = routes.reduce((sum, r) => sum + d[r], 0);
+    const cells = [d.day, ...routes.map((r) => d[r]), total].map((v) => `<td>${v}</td>`).join('');
+    tr.innerHTML = cells;
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);

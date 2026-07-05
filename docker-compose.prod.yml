@@ -1,0 +1,55 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: strait
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set in .env}
+      POSTGRES_DB: strait
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strait"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  ingest:
+    image: ghcr.io/konradkelly/straitscope:${IMAGE_TAG:-latest}
+    command: node src/ingest.js
+    environment:
+      DATABASE_URL: postgres://strait:${DB_PASSWORD}@db:5432/strait
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY:?set in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/konradkelly/straitscope:${IMAGE_TAG:-latest}
+    command: node src/worker.js
+    environment:
+      DATABASE_URL: postgres://strait:${DB_PASSWORD}@db:5432/strait
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/konradkelly/straitscope:${IMAGE_TAG:-latest}
+    command: node src/api.js
+    environment:
+      DATABASE_URL: postgres://strait:${DB_PASSWORD}@db:5432/strait
+      PORT: 8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  dbdata:

@@ -16,7 +16,7 @@ let buffer = [];
 let flushTimer = null;
 
 /**
- * Queue a position row: { time, mmsi, lat, lon, sog, cog, heading, corridor }
+ * Queue a position row: { time, mmsi, lat, lon, sog, cog, heading, region, corridor }
  */
 export function queuePosition(row) {
   buffer.push(row);
@@ -37,20 +37,20 @@ export async function flushPositions() {
   const rows = buffer;
   buffer = [];
 
-  const cols = 8;
+  const cols = 9;
   const values = [];
   const params = [];
   rows.forEach((r, i) => {
     const o = i * cols;
     values.push(
-      `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, $${o + 8})`
+      `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, $${o + 8}, $${o + 9})`
     );
-    params.push(r.time, r.mmsi, r.lat, r.lon, r.sog, r.cog, r.heading, r.corridor);
+    params.push(r.time, r.mmsi, r.lat, r.lon, r.sog, r.cog, r.heading, r.region, r.corridor);
   });
 
   try {
     await pool.query(
-      `INSERT INTO vessel_positions (time, mmsi, lat, lon, sog, cog, heading, corridor)
+      `INSERT INTO vessel_positions (time, mmsi, lat, lon, sog, cog, heading, region, corridor)
        VALUES ${values.join(',')}`,
       params
     );

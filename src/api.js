@@ -11,9 +11,21 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { parse as parseYaml } from 'yaml';
 import { pool, shutdown } from './db.js';
+import { REGIONS } from './geo.js';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const INCIDENTS_PATH = process.env.INCIDENTS_PATH ?? new URL('../data/incidents.yaml', import.meta.url);
+const DEFAULT_REGION = 'hormuz';
+
+function parseRegion(req, reply) {
+  const region = req.query.region ?? DEFAULT_REGION;
+  if (!REGIONS[region]) {
+    reply.code(400);
+    reply.send({ error: `unknown region '${region}'`, known: Object.keys(REGIONS) });
+    return null;
+  }
+  return region;
+}
 
 function ttlCache(ttlMs) {
   const store = new Map();
@@ -44,32 +56,50 @@ export async function buildServer() {
 
   await fastify.register(cors, { origin: true });
 
+  // List of supported regions and their map/gate/corridor config, so the
+  // frontend can build a region switcher without duplicating src/geo.js.
+  fastify.get('/api/v1/regions', async () => {
+    return Object.entries(REGIONS).map(([key, r]) => ({
+      key,
+      name: r.name,
+      mapCenter: r.mapCenter,
+      mapZoom: r.mapZoom,
+      gates: r.gates,
+      corridors: r.corridors,
+    }));
+  });
+
   // Live vessel positions for the map — latest report per vessel seen in
-  // the last 2 hours.
+  // the last 2 hours, within one region.
   fastify.get('/api/v1/live', async (req, reply) => {
-    const hit = liveCache.get('all');
+    const region = parseRegion(req, reply);
+    if (!region) return;
+    const hit = liveCache.get(region);
     if (hit) {
       reply.header('Cache-Control', 'public, max-age=30');
       return hit;
     }
-    const { rows } = await pool.query(`
-      SELECT DISTINCT ON (p.mmsi)
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (p.mmsi)
         p.mmsi, p.time, p.lat, p.lon, p.sog, p.cog, p.heading, p.corridor,
         v.name, v.ship_type_class
       FROM vessel_positions p
       LEFT JOIN vessels v ON v.mmsi = p.mmsi
-      WHERE p.time > now() - interval '2 hours'
-      ORDER BY p.mmsi, p.time DESC
-    `);
-    liveCache.set('all', rows);
+      WHERE p.region = $1 AND p.time > now() - interval '2 hours'
+      ORDER BY p.mmsi, p.time DESC`,
+      [region]
+    );
+    liveCache.set(region, rows);
     reply.header('Cache-Control', 'public, max-age=30');
     return rows;
   });
 
-  // Daily transit counts by direction and route.
+  // Daily transit counts by direction and route, within one region.
   fastify.get('/api/v1/stats/daily', async (req, reply) => {
+    const region = parseRegion(req, reply);
+    if (!region) return;
     const days = Math.min(Math.max(Number(req.query.days ?? 30) || 30, 1), 365);
-    const key = String(days);
+    const key = `${region}:${days}`;
     const hit = dailyCache.get(key);
     if (hit) {
       reply.header('Cache-Control', 'public, max-age=300');
@@ -78,9 +108,9 @@ export async function buildServer() {
     const { rows } = await pool.query(
       `SELECT day, direction, route, transit_count, distinct_vessels
        FROM daily_stats
-       WHERE day >= current_date - $1::int
+       WHERE region = $1 AND day >= current_date - $2::int
        ORDER BY day`,
-      [days]
+      [region, days]
     );
     dailyCache.set(key, rows);
     reply.header('Cache-Control', 'public, max-age=300');
@@ -89,66 +119,85 @@ export async function buildServer() {
 
   // Headline stats: today's transits, 7-day avg, route split %, dark count.
   fastify.get('/api/v1/stats/headline', async (req, reply) => {
-    const hit = headlineCache.get('all');
+    const region = parseRegion(req, reply);
+    if (!region) return;
+    const hit = headlineCache.get(region);
     if (hit) {
       reply.header('Cache-Control', 'public, max-age=300');
       return hit;
     }
     const [todayRes, weekRes, splitRes, darkRes] = await Promise.all([
-      pool.query(`SELECT count(*)::int AS n FROM transits WHERE exited_at::date = current_date`),
-      pool.query(`SELECT count(*)::int AS n FROM transits WHERE exited_at >= now() - interval '7 days'`),
       pool.query(
-        `SELECT route, count(*)::int AS n FROM transits
-         WHERE exited_at >= now() - interval '7 days' GROUP BY route`
+        `SELECT count(*)::int AS n FROM transits WHERE region = $1 AND exited_at::date = current_date`,
+        [region]
       ),
       pool.query(
-        `SELECT count(DISTINCT mmsi)::int AS n FROM dark_events WHERE detected_at >= now() - interval '24 hours'`
+        `SELECT count(*)::int AS n FROM transits WHERE region = $1 AND exited_at >= now() - interval '7 days'`,
+        [region]
+      ),
+      pool.query(
+        `SELECT route, count(*)::int AS n FROM transits
+         WHERE region = $1 AND exited_at >= now() - interval '7 days' GROUP BY route`,
+        [region]
+      ),
+      pool.query(
+        `SELECT count(DISTINCT mmsi)::int AS n FROM dark_events
+         WHERE region = $1 AND detected_at >= now() - interval '24 hours'`,
+        [region]
       ),
     ]);
 
     const weekTotal = weekRes.rows[0].n;
-    const splitCounts = Object.fromEntries(splitRes.rows.map((r) => [r.route, r.n]));
     const pct = (n) => (weekTotal > 0 ? Math.round((n / weekTotal) * 1000) / 10 : 0);
+    // Route vocabulary is region-specific (hormuz: northern/southern/mixed;
+    // singapore: unclassified) — build the split from whatever routes this
+    // region's transits actually used, rather than assuming Hormuz's names.
+    const route_split_pct = Object.fromEntries(
+      splitRes.rows.map((r) => [r.route, pct(r.n)])
+    );
 
     const data = {
       today_transits: todayRes.rows[0].n,
       seven_day_avg: Math.round((weekTotal / 7) * 10) / 10,
-      route_split_pct: {
-        northern: pct(splitCounts.northern ?? 0),
-        southern: pct(splitCounts.southern ?? 0),
-        mixed: pct(splitCounts.mixed ?? 0),
-      },
+      route_split_pct,
       dark_vessel_count_24h: darkRes.rows[0].n,
     };
-    headlineCache.set('all', data);
+    headlineCache.set(region, data);
     reply.header('Cache-Control', 'public, max-age=300');
     return data;
   });
 
-  // Curated incident timeline (data/incidents.yaml — PR = publish).
+  // Curated incident timeline (data/incidents.yaml — PR = publish), filtered
+  // to one region.
   fastify.get('/api/v1/incidents', async (req, reply) => {
-    const hit = incidentsCache.get('all');
+    const region = parseRegion(req, reply);
+    if (!region) return;
+    const hit = incidentsCache.get(region);
     if (hit) {
       reply.header('Cache-Control', 'public, max-age=300');
       return hit;
     }
     const raw = await readFile(INCIDENTS_PATH, 'utf8');
     const parsed = parseYaml(raw) ?? [];
-    const sorted = [...parsed].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-    incidentsCache.set('all', sorted);
+    const sorted = [...parsed]
+      .filter((i) => (i.region ?? DEFAULT_REGION) === region)
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    incidentsCache.set(region, sorted);
     reply.header('Cache-Control', 'public, max-age=300');
     return sorted;
   });
 
-  // Recent track for a single vessel (map click-through).
+  // Recent track for a single vessel (map click-through), within one region.
   fastify.get('/api/v1/vessel/:mmsi/track', async (req, reply) => {
+    const region = parseRegion(req, reply);
+    if (!region) return;
     const mmsi = Number(req.params.mmsi);
     if (!Number.isFinite(mmsi)) {
       reply.code(400);
       return { error: 'invalid mmsi' };
     }
     const hours = Math.min(Math.max(Number(req.query.hours ?? 24) || 24, 1), 168);
-    const key = `${mmsi}:${hours}`;
+    const key = `${region}:${mmsi}:${hours}`;
     const hit = trackCache.get(key);
     if (hit) {
       reply.header('Cache-Control', 'public, max-age=60');
@@ -156,9 +205,9 @@ export async function buildServer() {
     }
     const { rows } = await pool.query(
       `SELECT time, lat, lon, sog, cog, corridor FROM vessel_positions
-       WHERE mmsi = $1 AND time > now() - ($2 || ' hours')::interval
+       WHERE mmsi = $1 AND region = $2 AND time > now() - ($3 || ' hours')::interval
        ORDER BY time`,
-      [mmsi, hours]
+      [mmsi, region, hours]
     );
     trackCache.set(key, rows);
     reply.header('Cache-Control', 'public, max-age=60');

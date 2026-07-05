@@ -14,23 +14,31 @@
  */
 import { pathToFileURL } from 'node:url';
 import { pool } from './db.js';
-import { crossedGate } from './geo.js';
+import { REGIONS, crossedGate } from './geo.js';
 
 const RUN_INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS ?? 5 * 60_000);
 const ABANDON_AFTER_H = Number(process.env.ABANDON_AFTER_HOURS ?? 48);
 const DARK_AFTER_H = Number(process.env.DARK_AFTER_HOURS ?? 6);
-const ROUTE_THRESHOLD = 0.7; // spec §6.3
 
-export function classifyRoute(state) {
+/**
+ * Classify a completed transit's route within its region. Regions without
+ * named corridors (e.g. singapore) always come back 'unclassified' — see
+ * src/geo.js REGIONS.
+ */
+export function classifyRoute(region, state) {
+  const corridors = REGIONS[region]?.corridors;
+  if (!corridors) return 'unclassified';
+  const threshold = REGIONS[region].routeThreshold;
   const { northern_count: n, southern_count: s, total_count: t } = state;
   if (t === 0) return 'mixed';
-  if (n / t >= ROUTE_THRESHOLD) return 'northern';
-  if (s / t >= ROUTE_THRESHOLD) return 'southern';
+  if (n / t >= threshold) return 'northern';
+  if (s / t >= threshold) return 'southern';
   return 'mixed';
 }
 
-export function freshState(mmsi) {
+export function freshState(region, mmsi) {
   return {
+    region,
     mmsi,
     state: 'IDLE',
     entered_gate: null,
@@ -61,7 +69,7 @@ function resetToIdle(s) {
  * Pure — does not mutate `state`, returns the next state plus a completed
  * transit record if this position closed one out.
  * @param {object} state - a transit_state row shape (see freshState)
- * @param {{time: Date, lat: number, lon: number, sog: number|null, corridor: string}} position
+ * @param {{time: Date, lat: number, lon: number, sog: number|null, region: string, corridor: string}} position
  * @returns {{state: object, transit: object|null}}
  */
 export function applyPosition(state, position) {
@@ -70,7 +78,7 @@ export function applyPosition(state, position) {
 
   const prev = s.last_lat != null ? [s.last_lon, s.last_lat] : null;
   const curr = [position.lon, position.lat];
-  const gate = prev ? crossedGate(prev, curr) : null;
+  const gate = prev ? crossedGate(position.region, prev, curr) : null;
 
   if (s.state === 'IDLE' && gate) {
     s.state = 'IN_STRAIT';
@@ -86,7 +94,7 @@ export function applyPosition(state, position) {
         direction: s.entered_gate === 'west' ? 'outbound' : 'inbound',
         entered_at: s.entered_at,
         exited_at: position.time,
-        route: classifyRoute(s),
+        route: classifyRoute(position.region, s),
         n_positions: s.total_count,
       };
     }
@@ -127,13 +135,16 @@ export function checkStaleness(row, now, { abandonAfterH, darkAfterH }) {
   return { abandon: false, dark: false };
 }
 
-async function loadStates(client, mmsis) {
-  if (mmsis.length === 0) return new Map();
+const stateKey = (region, mmsi) => `${region}:${mmsi}`;
+
+async function loadStates(client, pairs) {
+  if (pairs.length === 0) return new Map();
   const { rows } = await client.query(
-    'SELECT * FROM transit_state WHERE mmsi = ANY($1)',
-    [mmsis]
+    `SELECT * FROM transit_state
+     WHERE (region, mmsi) IN (SELECT * FROM UNNEST($1::text[], $2::bigint[]))`,
+    [pairs.map((p) => p.region), pairs.map((p) => p.mmsi)]
   );
-  return new Map(rows.map((r) => [Number(r.mmsi), r]));
+  return new Map(rows.map((r) => [stateKey(r.region, Number(r.mmsi)), r]));
 }
 
 async function pass() {
@@ -151,40 +162,45 @@ async function pass() {
     }
 
     const { rows: positions } = await client.query(
-      `SELECT time, mmsi, lat, lon, sog, corridor
+      `SELECT time, mmsi, lat, lon, sog, region, corridor
        FROM vessel_positions
        WHERE time > $1 AND time <= $2
-       ORDER BY mmsi, time`,
+       ORDER BY region, mmsi, time`,
       [from, to]
     );
 
-    const states = await loadStates(client, [...new Set(positions.map((p) => Number(p.mmsi)))]);
+    const pairs = [...new Map(
+      positions.map((p) => [stateKey(p.region, Number(p.mmsi)), { region: p.region, mmsi: Number(p.mmsi) }])
+    ).values()];
+    const states = await loadStates(client, pairs);
     const completed = [];
 
     for (const p of positions) {
       const mmsi = Number(p.mmsi);
-      const prevState = states.get(mmsi) ?? freshState(mmsi);
+      const key = stateKey(p.region, mmsi);
+      const prevState = states.get(key) ?? freshState(p.region, mmsi);
       const { state: nextState, transit } = applyPosition(prevState, p);
+      nextState.region = p.region;
       nextState.mmsi = mmsi;
-      states.set(mmsi, nextState);
-      if (transit) completed.push({ mmsi, ...transit });
+      states.set(key, nextState);
+      if (transit) completed.push({ mmsi, region: p.region, ...transit });
     }
 
     for (const t of completed) {
       await client.query(
-        `INSERT INTO transits (mmsi, direction, entered_at, exited_at, route, n_positions)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [t.mmsi, t.direction, t.entered_at, t.exited_at, t.route, t.n_positions]
+        `INSERT INTO transits (mmsi, region, direction, entered_at, exited_at, route, n_positions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [t.mmsi, t.region, t.direction, t.entered_at, t.exited_at, t.route, t.n_positions]
       );
     }
 
     for (const s of states.values()) {
       await client.query(
         `INSERT INTO transit_state
-           (mmsi, state, entered_gate, entered_at, last_lat, last_lon, last_time,
+           (region, mmsi, state, entered_gate, entered_at, last_lat, last_lon, last_time,
             northern_count, southern_count, total_count, last_sog, dark_flagged)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         ON CONFLICT (mmsi) DO UPDATE SET
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         ON CONFLICT (region, mmsi) DO UPDATE SET
            state = EXCLUDED.state,
            entered_gate = EXCLUDED.entered_gate,
            entered_at = EXCLUDED.entered_at,
@@ -196,7 +212,7 @@ async function pass() {
            total_count = EXCLUDED.total_count,
            last_sog = EXCLUDED.last_sog,
            dark_flagged = EXCLUDED.dark_flagged`,
-        [s.mmsi, s.state, s.entered_gate, s.entered_at, s.last_lat, s.last_lon,
+        [s.region, s.mmsi, s.state, s.entered_gate, s.entered_at, s.last_lat, s.last_lon,
          s.last_time, s.northern_count, s.southern_count, s.total_count,
          s.last_sog, s.dark_flagged]
       );
@@ -207,7 +223,7 @@ async function pass() {
     // that has gone permanently quiet and will never produce another
     // position to trigger the per-position checks above.
     const { rows: staleRows } = await client.query(
-      `SELECT mmsi, last_time, last_sog, dark_flagged FROM transit_state
+      `SELECT region, mmsi, last_time, last_sog, dark_flagged FROM transit_state
        WHERE state = 'IN_STRAIT' AND last_time IS NOT NULL AND last_time <= $1`,
       [to]
     );
@@ -221,15 +237,18 @@ async function pass() {
         await client.query(
           `UPDATE transit_state SET state='IDLE', entered_gate=NULL, entered_at=NULL,
              northern_count=0, southern_count=0, total_count=0, dark_flagged=false
-           WHERE mmsi = $1`,
-          [row.mmsi]
+           WHERE region = $1 AND mmsi = $2`,
+          [row.region, row.mmsi]
         );
       } else if (dark) {
         newlyDark++;
-        await client.query('UPDATE transit_state SET dark_flagged = true WHERE mmsi = $1', [row.mmsi]);
         await client.query(
-          'INSERT INTO dark_events (mmsi, last_seen_at) VALUES ($1, $2)',
-          [row.mmsi, row.last_time]
+          'UPDATE transit_state SET dark_flagged = true WHERE region = $1 AND mmsi = $2',
+          [row.region, row.mmsi]
+        );
+        await client.query(
+          'INSERT INTO dark_events (mmsi, region, last_seen_at) VALUES ($1, $2, $3)',
+          [row.mmsi, row.region, row.last_time]
         );
       }
     }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Strait Tracker — Strait of Hormuz vessel traffic</title>
+  <title>Strait Tracker — maritime chokepoint vessel traffic</title>
 </head>
 <body>
   <div id="disclaimer-banner" class="banner" hidden>
@@ -15,8 +15,14 @@
   </div>
 
   <header class="page-header">
-    <h1>Strait Tracker</h1>
-    <p class="subtitle">Vessel traffic through the Strait of Hormuz</p>
+    <div>
+      <h1>Strait Tracker</h1>
+      <p class="subtitle" id="region-subtitle">Vessel traffic through the Strait of Hormuz</p>
+    </div>
+    <label class="region-switcher">
+      <span class="sr-only">Region</span>
+      <select id="region-select"></select>
+    </label>
   </header>
 
   <main>

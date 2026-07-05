@@ -12,7 +12,7 @@
  */
 import WebSocket from 'ws';
 import fs from 'node:fs';
-import { ROI_BBOX, classifyCorridor, shipTypeClass } from './geo.js';
+import { REGIONS, findRegion, classifyCorridor, shipTypeClass } from './geo.js';
 import { queuePosition, upsertVessel, shutdown } from './db.js';
 
 const API_KEY = process.env.AISSTREAM_API_KEY;
@@ -34,14 +34,15 @@ function connect() {
 
   ws.on('open', () => {
     backoffMs = 1000;
+    const boundingBoxes = Object.values(REGIONS).map((r) => r.roiBbox);
     ws.send(
       JSON.stringify({
         APIKey: API_KEY,
-        BoundingBoxes: [ROI_BBOX],
+        BoundingBoxes: boundingBoxes,
         FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
       })
     );
-    console.log('[ingest] subscribed', { roi: ROI_BBOX });
+    console.log('[ingest] subscribed', { regions: Object.keys(REGIONS), boundingBoxes });
   });
 
   ws.on('message', (raw) => {
@@ -66,6 +67,13 @@ function connect() {
       const lon = Number(p.Longitude);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
+      // Regions' ROIs are disjoint bounding boxes within one shared
+      // subscription (see connect() above) — figure out which one this
+      // position belongs to, or drop it if it's outside all of them (e.g. a
+      // stray match right at a bbox edge).
+      const region = findRegion(lon, lat);
+      if (!region) return;
+
       stats.positions++;
       queuePosition({
         time: meta.time_utc ? new Date(meta.time_utc) : new Date(),
@@ -75,7 +83,8 @@ function connect() {
         sog: Number.isFinite(p.Sog) ? p.Sog : null,
         cog: Number.isFinite(p.Cog) ? p.Cog : null,
         heading: Number.isFinite(p.TrueHeading) && p.TrueHeading !== 511 ? p.TrueHeading : null,
-        corridor: classifyCorridor(lon, lat),
+        region,
+        corridor: classifyCorridor(region, lon, lat),
       });
     } else if (msg.MessageType === 'ShipStaticData') {
       const s = msg.Message?.ShipStaticData;

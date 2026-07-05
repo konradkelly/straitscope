@@ -76,6 +76,11 @@ main {
   max-width: 1080px;
   margin: 0 auto;
   padding: 28px 20px 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .page-header h1 {
   margin: 0;
@@ -84,6 +89,22 @@ main {
 .subtitle {
   margin: 4px 0 0;
   color: var(--text-secondary);
+}
+.region-switcher select {
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .stat-row {
@@ -109,8 +130,9 @@ main {
   font-size: 1.6rem;
   font-weight: 600;
 }
-.split-n { color: var(--series-1); }
-.split-s { color: var(--series-2); }
+.split-northern { color: var(--series-1); }
+.split-southern { color: var(--series-2); }
+.split-mixed, .split-unclassified { color: var(--series-3); }
 
 section[aria-label] > h2,
 .section-head h2 {

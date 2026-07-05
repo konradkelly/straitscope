@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Bootstraps the box: Docker + Compose plugin, Caddy (TLS via Let's Encrypt),
+# and the /opt/straitscope app directory. GitHub Actions handles the
+# actual app deploy (scp docker-compose.yml/.env/web-dist, `docker compose
+# up -d`) per spec.md sec9 CI/CD -- this script only prepares the host.
+set -euxo pipefail
+
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg debian-keyring debian-archive-keyring apt-transport-https
+
+# Docker
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+usermod -aG docker ubuntu
+
+# Caddy (official Cloudsmith repo)
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' -o /etc/apt/sources.list.d/caddy-stable.list
+apt-get update -y
+apt-get install -y caddy
+
+mkdir -p /opt/straitscope/web/dist
+chown -R ubuntu:ubuntu /opt/straitscope
+
+cat > /etc/caddy/Caddyfile <<'CADDYFILE_EOF'
+${caddyfile}
+CADDYFILE_EOF
+
+systemctl enable caddy
+systemctl restart caddy

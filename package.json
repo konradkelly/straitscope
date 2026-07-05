@@ -10,6 +10,7 @@
     "worker": "node src/worker.js",
     "api": "node src/api.js",
     "test": "node --test test/",
+    "lint": "eslint .",
     "export-tracks": "node --env-file=.env tools/export-tracks.js"
   },
   "dependencies": {
@@ -20,6 +21,9 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.1.0",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0"
   }
 }

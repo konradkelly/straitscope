@@ -1,21 +1,30 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { GATES, CORRIDORS } from '../../src/geo.js';
+import { REGIONS } from '../../src/geo.js';
 
-const ROUTE_COLOR = ['match', ['get', 'name'], 'northern', '#2a78d6', 'southern', '#1baf7a', '#898781'];
+// Falls back to a neutral grey for corridor names this palette doesn't know
+// about — keeps regions with different corridor vocab (or none) from
+// rendering blank.
+const ROUTE_COLOR = [
+  'match', ['get', 'name'],
+  'northern', '#2a78d6',
+  'southern', '#1baf7a',
+  '#898781',
+];
 const SHIP_TYPE_COLOR = ['match', ['get', 'ship_type_class'], 'tanker', '#2a78d6', 'cargo', '#1baf7a', '#eda100'];
 
-export function initMap(container) {
+export function initMap(container, regionKey) {
+  const region = REGIONS[regionKey];
   const map = new maplibregl.Map({
     container,
     style: 'https://demotiles.maplibre.org/style.json',
-    center: [56.3, 26.3],
-    zoom: 6.5,
+    center: region.mapCenter,
+    zoom: region.mapZoom,
   });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
   map.on('load', () => {
-    map.addSource('corridors', { type: 'geojson', data: corridorsGeoJSON() });
+    map.addSource('corridors', { type: 'geojson', data: corridorsGeoJSON(regionKey) });
     map.addLayer({
       id: 'corridors-fill',
       type: 'fill',
@@ -33,7 +42,7 @@ export function initMap(container) {
     // — the placeholder gate coordinates currently sit on the corridor
     // polygons' own west/east edges (spec §6.1/§6.3), so drawn underneath
     // they'd be fully hidden by the opaque corridor outline.
-    map.addSource('gates', { type: 'geojson', data: gatesGeoJSON() });
+    map.addSource('gates', { type: 'geojson', data: gatesGeoJSON(regionKey) });
     map.addLayer({
       id: 'gates',
       type: 'line',
@@ -131,10 +140,26 @@ export function toggleLayer(map, id, visible) {
   map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
 }
 
-function gatesGeoJSON() {
+/**
+ * Switch the map to a different region: recenter/rezoom and swap the
+ * corridors/gates sources. Vessel and incident sources are left for the
+ * caller to refresh via setVessels/setIncidents once the new region's data
+ * has loaded.
+ */
+export function setRegion(map, regionKey) {
+  const region = REGIONS[regionKey];
+  map.jumpTo({ center: region.mapCenter, zoom: region.mapZoom });
+  map.getSource('corridors')?.setData(corridorsGeoJSON(regionKey));
+  map.getSource('gates')?.setData(gatesGeoJSON(regionKey));
+  map.getSource('vessels')?.setData(emptyFC());
+  map.getSource('incidents')?.setData(emptyFC());
+}
+
+function gatesGeoJSON(regionKey) {
+  const gates = REGIONS[regionKey].gates ?? {};
   return {
     type: 'FeatureCollection',
-    features: Object.entries(GATES).map(([name, coords]) => ({
+    features: Object.entries(gates).map(([name, coords]) => ({
       type: 'Feature',
       properties: { name },
       geometry: { type: 'LineString', coordinates: coords },
@@ -142,10 +167,11 @@ function gatesGeoJSON() {
   };
 }
 
-function corridorsGeoJSON() {
+function corridorsGeoJSON(regionKey) {
+  const corridors = REGIONS[regionKey].corridors ?? {};
   return {
     type: 'FeatureCollection',
-    features: Object.entries(CORRIDORS).map(([name, coords]) => ({
+    features: Object.entries(corridors).map(([name, coords]) => ({
       type: 'Feature',
       properties: { name },
       geometry: { type: 'Polygon', coordinates: [[...coords, coords[0]]] },

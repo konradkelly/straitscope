@@ -1,66 +1,104 @@
 /**
- * geo.js — region of interest, gate lines, corridor polygons, and the two
+ * geo.js — per-region config (ROI, gate lines, corridor polygons) plus the
  * geometric primitives the whole product rests on: point-in-polygon and
  * segment intersection.
  *
  * ⚠ CALIBRATION REQUIRED: every coordinate below is an engineering
- * placeholder, eyeballed from a chart. Before launch, plot a few days of
- * real tracks (see tools/plot_tracks.sql idea in spec §6) and trace the
- * actual observed lanes. The route split is the product — get this right.
+ * placeholder, eyeballed from a chart. Before relying on a region's transit
+ * counts, plot a few days of real tracks (see tools/export-tracks.js) and
+ * trace the actual observed lanes.
  *
- * Convention: all points are [lon, lat] (GeoJSON order).
+ * Convention: all points are [lon, lat] (GeoJSON order), except `roiBbox`
+ * which follows AISStream's own [lat, lon] SW→NE convention (see ingest.js).
  */
 
-// Bounding box sent to AISStream: [[lat, lon], [lat, lon]] (their convention, SW → NE)
-export const ROI_BBOX = [
-  [25.0, 54.5],
-  [27.8, 58.5],
-];
+// ---------------------------------------------------------------------------
+// Region registry. Add a region by adding an entry here — ingest.js,
+// worker.js, api.js, and the frontend all key off this one object.
+//
+// `corridors` is optional: a region with no named corridors (e.g. Singapore
+// Strait, which has no Hormuz-style politically-distinct route split) gets
+// `null`, and classifyCorridor/classifyRoute degrade to 'unclassified'
+// rather than forcing a meaningless northern/southern label onto it.
+// ---------------------------------------------------------------------------
+export const REGIONS = {
+  hormuz: {
+    name: 'Strait of Hormuz',
+    // Persian Gulf approach, the strait itself, and the Gulf of Oman approach.
+    roiBbox: [[25.0, 54.5], [27.8, 58.5]],
+    gates: {
+      // Persian Gulf side, west of the strait's narrowest point
+      west: [[55.7, 26.55], [55.7, 25.9]],
+      // Gulf of Oman side, east of the strait
+      east: [[57.1, 26.1], [57.1, 25.3]],
+    },
+    corridors: {
+      // northern ≈ traditional TSS lanes / Iranian-waters routing
+      northern: [
+        [55.7, 26.55],
+        [56.3, 26.75],
+        [56.9, 26.5],
+        [57.1, 26.1],
+        [57.1, 25.9],
+        [56.8, 26.2],
+        [56.25, 26.45],
+        [55.7, 26.25],
+      ],
+      // southern ≈ Omani coastal corridor
+      southern: [
+        [55.7, 26.2],
+        [56.2, 26.35],
+        [56.7, 26.1],
+        [57.1, 25.85],
+        [57.1, 25.3],
+        [56.6, 25.85],
+        [56.1, 26.1],
+        [55.7, 25.9],
+      ],
+    },
+    routeThreshold: 0.7,
+    mapCenter: [56.3, 26.3],
+    mapZoom: 6.5,
+  },
 
-// ---------------------------------------------------------------------------
-// Gate lines (virtual tripwires). A transit = crossing both, in order.
-// Each gate is a segment: [[lon, lat], [lon, lat]]
-// ---------------------------------------------------------------------------
-export const GATES = {
-  // Persian Gulf side, west of the strait's narrowest point
-  west: [
-    [55.7, 26.55],
-    [55.7, 25.9],
-  ],
-  // Gulf of Oman side, east of the strait
-  east: [
-    [57.1, 26.1],
-    [57.1, 25.3],
-  ],
+  singapore: {
+    name: 'Singapore Strait',
+    // Malacca Strait approach (west) through to the South China Sea approach (east).
+    // Empirically confirmed to have live AISStream coverage (24 msgs/25s test,
+    // vs. 0 for Hormuz) — see spec.md §4.1 for the full survey.
+    roiBbox: [[1.0, 103.4], [1.5, 104.3]],
+    gates: {
+      // West gate: near Raffles Lighthouse, the Malacca Strait TSS transition
+      west: [[103.75, 1.28], [103.75, 1.05]],
+      // East gate: approaching Horsburgh Lighthouse, the South China Sea transition
+      east: [[104.10, 1.35], [104.10, 1.15]],
+    },
+    // No politically-distinct route split here (unlike Hormuz's Iran/Oman
+    // corridors) — leave unset until/unless a real product need for one
+    // shows up.
+    corridors: null,
+    routeThreshold: null,
+    mapCenter: [103.85, 1.2],
+    mapZoom: 9.5,
+  },
 };
 
-// ---------------------------------------------------------------------------
-// Corridor polygons (rough placeholders — CALIBRATE before launch)
-// northern ≈ traditional TSS lanes / Iranian-waters routing
-// southern ≈ Omani coastal corridor
-// ---------------------------------------------------------------------------
-export const CORRIDORS = {
-  northern: [
-    [55.7, 26.55],
-    [56.3, 26.75],
-    [56.9, 26.5],
-    [57.1, 26.1],
-    [57.1, 25.9],
-    [56.8, 26.2],
-    [56.25, 26.45],
-    [55.7, 26.25],
-  ],
-  southern: [
-    [55.7, 26.2],
-    [56.2, 26.35],
-    [56.7, 26.1],
-    [57.1, 25.85],
-    [57.1, 25.3],
-    [56.6, 25.85],
-    [56.1, 26.1],
-    [55.7, 25.9],
-  ],
-};
+/**
+ * Which region (if any) does this position fall inside? Regions' ROI boxes
+ * are assumed disjoint, so first match wins.
+ * @returns {string | null} region key, or null if outside every configured ROI
+ */
+export function findRegion(lon, lat) {
+  for (const [key, region] of Object.entries(REGIONS)) {
+    const [[latA, lonA], [latB, lonB]] = region.roiBbox;
+    const minLat = Math.min(latA, latB);
+    const maxLat = Math.max(latA, latB);
+    const minLon = Math.min(lonA, lonB);
+    const maxLon = Math.max(lonA, lonB);
+    if (lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon) return key;
+  }
+  return null;
+}
 
 /**
  * Ray-casting point-in-polygon. Fine at this scale (< 200 km, no pole/antimeridian).
@@ -83,12 +121,17 @@ export function pointInPolygon(lon, lat, polygon) {
 }
 
 /**
- * Classify a position into a corridor.
- * @returns {'northern' | 'southern' | 'outside'}
+ * Classify a position into one of a region's named corridors.
+ * @param {string} regionKey
+ * @returns {string} corridor name, 'outside' (in the ROI but no named
+ *   corridor), or 'unclassified' (region has no corridors defined at all)
  */
-export function classifyCorridor(lon, lat) {
-  if (pointInPolygon(lon, lat, CORRIDORS.northern)) return 'northern';
-  if (pointInPolygon(lon, lat, CORRIDORS.southern)) return 'southern';
+export function classifyCorridor(regionKey, lon, lat) {
+  const corridors = REGIONS[regionKey]?.corridors;
+  if (!corridors) return 'unclassified';
+  for (const [name, polygon] of Object.entries(corridors)) {
+    if (pointInPolygon(lon, lat, polygon)) return name;
+  }
   return 'outside';
 }
 
@@ -126,14 +169,18 @@ export function segmentsIntersect(a, b) {
 }
 
 /**
- * Which gate (if any) does the movement p1 → p2 cross?
+ * Which gate (if any) does the movement p1 → p2 cross, within a given region?
+ * @param {string} regionKey
  * @param {[number, number]} p1 - [lon, lat]
  * @param {[number, number]} p2 - [lon, lat]
- * @returns {'west' | 'east' | null}
+ * @returns {string | null} gate name (e.g. 'west' | 'east'), or null
  */
-export function crossedGate(p1, p2) {
-  if (segmentsIntersect([p1, p2], GATES.west)) return 'west';
-  if (segmentsIntersect([p1, p2], GATES.east)) return 'east';
+export function crossedGate(regionKey, p1, p2) {
+  const gates = REGIONS[regionKey]?.gates;
+  if (!gates) return null;
+  for (const [name, line] of Object.entries(gates)) {
+    if (segmentsIntersect([p1, p2], line)) return name;
+  }
   return null;
 }
 

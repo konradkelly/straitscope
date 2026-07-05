@@ -1,0 +1,19 @@
+${domain_name}, www.${domain_name} {
+%{ if acme_email != null ~}
+	tls ${acme_email}
+%{ endif ~}
+
+	handle /healthz {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		root * /opt/straitscope/web/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

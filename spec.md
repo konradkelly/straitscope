@@ -1,10 +1,10 @@
 # Strait Tracker — v1 Specification
 
-Real-time monitoring dashboard for vessel traffic through the Strait of Hormuz, with route-split classification (Iranian "Route of Authority" vs. the southern Omani corridor), daily transit counts, and a curated incident timeline.
+Real-time monitoring dashboard for vessel traffic through global maritime chokepoints. Launched single-region (Strait of Hormuz, with route-split classification between the Iranian "Route of Authority" and the southern Omani corridor); now multi-region, with the Singapore Strait added as the second tracked chokepoint. Each region gets daily transit counts and a curated incident timeline; route-split classification is opt-in per region since it depends on there being a real politically-meaningful lane split (Hormuz has one, Singapore Strait doesn't).
 
 **Author:** Konrad Kelly
 **Status:** Draft v1
-**Last updated:** 2026-07-02
+**Last updated:** 2026-07-04
 
 ---
 
@@ -12,19 +12,20 @@ Real-time monitoring dashboard for vessel traffic through the Strait of Hormuz, 
 
 ### 1.1 Goals
 
-1. Ingest live AIS position data for the Strait of Hormuz region and persist it durably.
-2. Detect **completed transits** (a vessel passing through the strait end-to-end) and count them per day.
-3. Classify each transit by **route corridor**: `northern` (Iranian waters / "Route of Authority"), `southern` (Omani coastal corridor), or `mixed/unknown`.
-4. Serve a public dashboard: live vessel map, daily transit chart with route split, headline stats, incident timeline.
-5. Demonstrate production DevOps practices: IaC (Terraform), CI/CD (GitHub Actions), monitoring, and a documented runbook.
+1. Ingest live AIS position data for one or more configured chokepoint regions and persist it durably.
+2. Detect **completed transits** (a vessel passing through a region's strait end-to-end) and count them per day, per region.
+3. Where a region has a real politically- or navigationally-distinct lane split, classify each transit by **route corridor** (e.g. Hormuz's `northern` Iranian-waters "Route of Authority" vs. `southern` Omani coastal corridor); regions without one report `unclassified` rather than forcing a meaningless label.
+4. Serve a public dashboard with a **region switcher**: live vessel map, daily transit chart with route split (where applicable), headline stats, incident timeline — all scoped to the selected region.
+5. Support adding a new region as a config change (`src/geo.js` `REGIONS`) plus real gate/corridor calibration, not a code fork — validated in practice by adding the Singapore Strait as the second region (§4.1.1).
+6. Demonstrate production DevOps practices: IaC (Terraform), CI/CD (GitHub Actions), monitoring, and a documented runbook.
 
 ### 1.2 Non-Goals (v1)
 
 - **No navigational use.** Prominent disclaimer required (see §8).
-- No satellite AIS (S-AIS). Terrestrial/volunteer feeds only; coverage gaps are expected and surfaced honestly.
+- No satellite AIS (S-AIS) *by default*. Terrestrial/volunteer feeds only. This is no longer a hypothetical caveat: §4.1.1's survey found the Strait of Hormuz has **zero** terrestrial AISStream coverage mid-channel, so its transit count is a confirmed, persistent zero until a satellite feed is integrated for that region specifically (tracked as future work, §11). Other regions are added only after the same empirical check confirms real coverage.
 - No historical backfill before launch date.
 - No user accounts, alerts, or paid tiers.
-- No automated news/incident scraping — incidents are curated manually via a YAML file in the repo (PR = publish).
+- No automated news/incident scraping — incidents are curated manually via a YAML file in the repo (PR = publish), tagged per region.
 - No prediction, ETA estimation, or oil-price analytics.
 
 ---
@@ -44,35 +45,39 @@ Real-time monitoring dashboard for vessel traffic through the Strait of Hormuz, 
 ## 3. System Architecture
 
 ```
-┌──────────────┐    websocket     ┌──────────────┐
-│ AISStream.io │ ───────────────► │  Ingest svc  │
-│  (free AIS)  │                  │  (Node.js)   │
-└──────────────┘                  └──────┬───────┘
-                                         │ INSERT (batched)
-                                         ▼
-                                  ┌──────────────┐
-                                  │  PostgreSQL  │
-                                  │ + TimescaleDB│
-                                  └──────┬───────┘
-                                         │
-                    ┌────────────────────┼─────────────────────┐
-                    ▼                    ▼                     ▼
-             ┌────────────┐      ┌──────────────┐      ┌─────────────┐
-             │ Transit    │      │  API (REST)  │      │  pg_cron /  │
-             │ detector   │      │  Fastify     │      │  retention  │
-             │ (worker)   │      └──────┬───────┘      └─────────────┘
-             └────────────┘             │  JSON (cached)
-                                        ▼
-                                 ┌──────────────┐
-                                 │  Frontend    │
-                                 │ MapLibre +   │
-                                 │ static site  │
-                                 └──────────────┘
+┌──────────────┐   websocket, N bboxes   ┌──────────────┐
+│ AISStream.io │ ───────────────────────►│  Ingest svc  │
+│  (free AIS)  │  (one subscription per  │  (Node.js)   │
+└──────────────┘   region, see §4.1)     └──────┬───────┘
+                                                │ findRegion(lon,lat) tags
+                                                │ each row, INSERT (batched)
+                                                ▼
+                                         ┌──────────────┐
+                                         │  PostgreSQL  │
+                                         │ + TimescaleDB│
+                                         │ (region col  │
+                                         │  everywhere) │
+                                         └──────┬───────┘
+                                                │
+                    ┌───────────────────────────┼─────────────────────┐
+                    ▼                           ▼                     ▼
+             ┌────────────┐            ┌──────────────┐      ┌─────────────┐
+             │ Transit    │            │  API (REST)  │      │  pg_cron /  │
+             │ detector   │            │  Fastify     │      │  retention  │
+             │ (worker),  │            │  ?region=    │      └─────────────┘
+             │ per (region,mmsi)       └──────┬───────┘
+             └────────────┘                   │  JSON (cached per region)
+                                               ▼
+                                        ┌──────────────┐
+                                        │  Frontend    │
+                                        │ MapLibre +   │
+                                        │ region switcher│
+                                        └──────────────┘
 ```
 
 **Deployment shape (v1):** one small VM (t3.small or equivalent) running Docker Compose with four containers: `db`, `ingest`, `worker`, `api`. Frontend deployed as static files to S3+CloudFront (or the same VM behind Caddy). Terraform provisions the VM, security groups, and DNS. GitHub Actions builds images and deploys over SSH (same pattern as Cascadia Gear Co-op).
 
-Rationale: a single always-on websocket consumer does not justify ECS/EKS. Keep it boring; the resume value is in the pipeline correctness and the runbook, not in cluster orchestration.
+Rationale: a single always-on websocket consumer does not justify ECS/EKS. Keep it boring; the resume value is in the pipeline correctness and the runbook, not in cluster orchestration. Adding a region is a config change (`src/geo.js` `REGIONS`) plus a schema no-op (the `region` column already exists everywhere) — it does not add a new container, VM, or websocket connection, since AISStream accepts multiple bounding boxes on one subscription.
 
 ---
 
@@ -81,14 +86,40 @@ Rationale: a single always-on websocket consumer does not justify ECS/EKS. Keep 
 ### 4.1 AIS positions — AISStream.io
 
 - Free websocket API (`wss://stream.aisstream.io/v0/stream`), API key required.
-- Subscribe with a bounding box and message-type filter.
-- **Region of interest (ROI):** `[[25.0, 54.5], [27.8, 58.5]]` (lat, lon pairs; SW → NE corners). Covers the Persian Gulf approach, the strait itself, and the Gulf of Oman approach.
+- Subscribe once, with **one bounding box per configured region** (`BoundingBoxes` accepts an array) and a message-type filter — one connection serves every region.
 - Message types consumed: `PositionReport` (types 1/2/3), `ShipStaticData` (type 5) for names/types.
-- **Known limitations:** volunteer terrestrial receiver network → coverage gaps, especially mid-channel and during conflict (vessels going dark / AIS spoofing). These gaps are a *feature to display* ("vessels gone dark in last 24 h"), not something to hide.
+- **Known limitation:** AISStream is built entirely from volunteer-operated terrestrial AIS receivers (~200 km off populated coastlines, per their own docs) — there is no satellite component. Coverage therefore tracks *hobbyist-receiver density*, not shipping volume or a chokepoint's geopolitical importance.
+
+#### 4.1.1 Coverage survey (2026-07-03/04)
+
+Production launched with the Strait of Hormuz as the only region and recorded **zero transits in its first 9+ hours live**. Root-cause investigation (not a code bug — the ingest service, API, and frontend were all functioning correctly) found:
+
+- `/healthz` showed `vessel_positions` had never received a single row.
+- A fresh, direct AISStream connection from the production host, subscribed to Hormuz's ROI, received **0 messages in 45 s live** and **0 messages across the prior 9 hours** of ingest logs — despite the strait being one of the busiest tanker chokepoints on Earth.
+- The same connection, subscribed **worldwide**, received 5,289 messages in 30 s — the API key and subscription mechanism work fine.
+- AISStream's own published coverage map (`aisstream.io/coverage`) shows a complete visual void over the entire Persian Gulf / Arabian Peninsula / Iranian coastline, while Europe, North America, East Asia, and Australia are densely covered.
+
+This prompted a broader empirical survey — the same live-connection test (subscribe, count raw messages over a fixed window, no code changes) — across other candidate chokepoints, to find out whether Hormuz's dead zone was a one-off or the norm:
+
+| Region | Test window | Messages | Verdict |
+|---|---|---|---|
+| Strait of Hormuz | 9 h (prod) + 45 s (fresh) | 0 | **Dead zone** |
+| Bab-el-Mandeb | 60 s | 0 | **Dead zone** |
+| Malacca Strait (narrowest point, One Fathom Bank) | 60 s | 0 | **Dead zone** — despite the Singapore Strait (same waterway, ~60 nm east) being excellent |
+| Gibraltar | 60 s | 2 | Marginal — some coverage, thin |
+| Dover Strait | 30 s | 10 | Good |
+| Öresund (Denmark/Sweden) | 25 s | 16 | Excellent |
+| **Singapore Strait** | 25 s | **24** | **Excellent — selected as region #2** |
+
+**Conclusion:** coverage correlates with wealthy, densely populated, hobbyist-AIS-culture coastlines (Northern Europe, Singapore) — not with a chokepoint's shipping volume or news profile. Bab-el-Mandeb is currently the most geopolitically newsworthy strait in the world (Red Sea shipping disruption) and is exactly as dark as Hormuz, for the same reason: no nearby volunteer receivers. Malacca is the sharpest illustration that this is receiver-placement-specific, not region-wide — its narrowest, busiest point is dead even though the Singapore Strait end of the same waterway (~60 nm away) is one of the best-covered chokepoints tested.
+
+**Process implication:** a region must pass this live-connection coverage check *before* any gate/corridor calibration work is done on it — "this general area seems well-populated" is not sufficient, since coverage can flip from excellent to zero within the same strait depending on exactly where the gate line sits.
+
+**Path forward for Hormuz specifically (not yet built):** a satellite AIS feed is required to ever get real transit counts there. A provider survey (VesselFinder, Datalastic, Spire/Kpler, ORBCOMM/S&P, NavAPI, DataDocked, AISHub) found the market has consolidated into two enterprise-only platforms (Kpler, S&P Global) plus a handful of independent developer-tier APIs. VesselFinder is the leading candidate: an explicit, published per-record satellite AIS credit cost (10 credits/record vs. 1 for terrestrial) with no monthly minimum beyond a small initial credit purchase — the only option surveyed with both real satellite coverage and pay-as-you-go pricing suited to this project's scale. This is tracked as future work (§11), not implemented in this multi-region pass, which instead added Singapore Strait — a region that works today on the existing free feed.
 
 ### 4.2 Incidents — manual curation
 
-- `data/incidents.yaml` in the repo. Each entry: `date`, `title`, `summary`, `lat/lon (optional)`, `source_url`, `severity (info|attack|grounding|seizure)`.
+- `data/incidents.yaml` in the repo. Each entry: `date`, `title`, `summary`, `lat/lon (optional)`, `region` (defaults to `hormuz` if omitted — see §5.1 region registry), `source_url`, `severity (info|attack|grounding|seizure)`.
 - Sources: IMO reports, UKMTO warnings, reputable press. Adding an incident = opening a PR (audit trail for free).
 
 ### 4.3 Explicitly out of scope
@@ -102,8 +133,12 @@ Rationale: a single always-on websocket consumer does not justify ECS/EKS. Keep 
 
 See `sql/schema.sql` for authoritative DDL. Summary:
 
-### 5.1 `vessels`
-Static registry keyed by MMSI. Upserted from `ShipStaticData` messages.
+### 5.1 Region registry (`src/geo.js` `REGIONS`, not a DB table)
+
+Every table below carries a `region TEXT` column (default `'hormuz'` for backward compatibility) whose valid values are the keys of the `REGIONS` config object — currently `hormuz` and `singapore`. Each entry defines: `roiBbox` (AISStream subscription box), `gates` (named gate line segments — a region can have any gate names, though `west`/`east` is the convention so far), `corridors` (optional named polygons for route classification — `null` if the region has no politically-distinct lane split), `routeThreshold`, and frontend map center/zoom. Adding a region is an entry in this object plus real gate/corridor calibration — see §4.1.1 for the coverage check that must pass first.
+
+### 5.2 `vessels`
+Static registry keyed by MMSI. Not region-scoped — a vessel keeps one identity as it moves between regions. Upserted from `ShipStaticData` messages.
 
 | column | type | notes |
 |---|---|---|
@@ -114,7 +149,7 @@ Static registry keyed by MMSI. Upserted from `ShipStaticData` messages.
 | flag | text | derived from MMSI MID prefix |
 | first_seen / last_seen | timestamptz | |
 
-### 5.2 `vessel_positions` (hypertable)
+### 5.3 `vessel_positions` (hypertable)
 Append-only time series, partitioned by time.
 
 | column | type | notes |
@@ -125,24 +160,29 @@ Append-only time series, partitioned by time.
 | sog | real | speed over ground, knots |
 | cog | real | course over ground |
 | heading | smallint | |
-| corridor | text | `northern` / `southern` / `outside` — computed at insert |
+| region | text | which `REGIONS` entry this position's bbox matched, at insert time |
+| corridor | text | region-specific corridor name, or `outside` / `unclassified` — computed at insert |
 
 Retention: raw positions kept 30 days (Timescale retention policy); aggregates kept forever.
 
-### 5.3 `transits`
+### 5.4 `transits`
 One row per completed end-to-end passage.
 
 | column | type | notes |
 |---|---|---|
 | id | bigserial PK | |
 | mmsi | bigint | |
-| direction | text | `inbound` (Gulf of Oman → Persian Gulf) / `outbound` |
+| region | text | |
+| direction | text | `inbound` / `outbound` — meaning is region-specific (see §6.2) |
 | entered_at / exited_at | timestamptz | gate-crossing timestamps |
-| route | text | `northern` / `southern` / `mixed` |
+| route | text | region-specific vocabulary (hormuz: `northern`/`southern`/`mixed`; singapore: `unclassified`) — validated in `worker.js`, not a DB enum, since it varies per region |
 | n_positions | int | sample count during transit (quality signal) |
 
-### 5.4 `daily_stats` (continuous aggregate or materialized view)
-`day, direction, route, transit_count, distinct_vessels, dark_vessel_count`.
+### 5.5 `transit_state`
+Per-vessel detector state, **keyed by `(region, mmsi)`** — the same physical ship gets an independent state machine in each region it passes through (in practice these ROIs are geographically far apart, but the key exists in case that ever changes).
+
+### 5.6 `daily_stats` (materialized view)
+`day, region, direction, route, transit_count, distinct_vessels`.
 
 ---
 
@@ -150,16 +190,18 @@ One row per completed end-to-end passage.
 
 ### 6.1 Gate lines
 
-Two virtual gate segments across the shipping approaches:
+Each region defines named gate line segments in `src/geo.js` `REGIONS[key].gates`. A vessel's consecutive position pair (p₁, p₂) **crosses a gate** if the segment p₁→p₂ intersects the gate segment (standard 2-D segment intersection; the geographic distortion at this scale is negligible for detection purposes). `crossedGate(regionKey, p1, p2)` checks only that region's gates, so a Hormuz-area crossing can never spuriously trip a Singapore gate (their ROIs are disjoint bounding boxes, so this is somewhat moot in practice, but it's how multiple regions coexist safely in one worker pass).
 
-- **West gate (Persian Gulf side):** segment ~ (26.55°N, 55.70°E) → (25.90°N, 55.70°E)
-- **East gate (Gulf of Oman side):** segment ~ (26.10°N, 57.10°E) → (25.30°N, 57.10°E)
+Current gate definitions:
 
-A vessel's consecutive position pair (p₁, p₂) **crosses a gate** if the segment p₁→p₂ intersects the gate segment (standard 2-D segment intersection; the geographic distortion at this scale is negligible for detection purposes).
+| Region | West gate | East gate |
+|---|---|---|
+| Hormuz | (26.55°N, 55.70°E) → (25.90°N, 55.70°E) — Persian Gulf side | (26.10°N, 57.10°E) → (25.30°N, 57.10°E) — Gulf of Oman side |
+| Singapore | (1.28°N, 103.75°E) → (1.05°N, 103.75°E) — near Raffles Lighthouse, Malacca Strait transition | (1.35°N, 104.10°E) → (1.15°N, 104.10°E) — near Horsburgh Lighthouse, South China Sea transition |
 
-> Gate coordinates above are engineering placeholders — calibrate against a few days of real traffic before launch and record final values in `src/geo.js`.
+> All gate coordinates above are engineering placeholders — calibrate against a few days of real traffic before trusting the counts, and record final values in `src/geo.js`. This was already true for Hormuz pre-launch and is equally true for Singapore now.
 
-### 6.2 Transit state machine (per MMSI)
+### 6.2 Transit state machine (per `(region, mmsi)`)
 
 ```
 IDLE ──cross west gate──► IN_STRAIT(expect=east)  ──cross east gate──► TRANSIT(outbound) → IDLE
@@ -168,41 +210,39 @@ IN_STRAIT ──no positions for 48 h── ► ABANDONED → IDLE   (vessel dar
 IN_STRAIT ──re-cross same gate──► IDLE            (turned back; no transit recorded)
 ```
 
-Runs in the `worker` process every 5 minutes over positions since the last watermark. State persisted in a `transit_state` table so restarts are safe (idempotent by watermark).
+`direction` is always derived the same way (`entered_gate === 'west' ? 'outbound' : 'inbound'`) but its real-world meaning is region-specific: for Hormuz, outbound means Persian Gulf → Gulf of Oman; for Singapore, outbound means Malacca Strait → South China Sea. Runs in the `worker` process every 5 minutes over positions since the last watermark (shared across regions — one time-ordered sweep, each row already tagged with its own `region`). State persisted in `transit_state`, keyed by `(region, mmsi)`, so restarts are safe (idempotent by watermark).
 
 ### 6.3 Route classification
 
-Two hand-drawn corridor polygons stored as GeoJSON in `src/geo.js`:
-
-- `NORTHERN_CORRIDOR` — traditional TSS lanes / Iranian-waters routing.
-- `SOUTHERN_CORRIDOR` — Omani coastal corridor.
-
-Each position gets a point-in-polygon check at insert time (ray casting; polygons have < 30 vertices, cost is negligible). A transit's `route` is:
+Optional per region. A region with named corridors (currently only Hormuz) gets two hand-drawn polygons stored as GeoJSON in `src/geo.js` (`REGIONS.hormuz.corridors.northern` / `.southern` — traditional TSS lanes / Iranian-waters routing vs. the Omani coastal corridor). Each position gets a point-in-polygon check at insert time (ray casting; polygons have < 30 vertices, cost is negligible). A transit's `route` is:
 
 - `northern` if ≥ 70% of in-strait positions fall in the northern polygon
 - `southern` if ≥ 70% fall in the southern polygon
 - `mixed` otherwise
 
-> Polygon vertices in the scaffold are rough placeholders. Calibrate by plotting a week of real tracks and tracing the two observed lanes. This calibration is the single most important pre-launch task — the route split is the product's differentiator.
+A region with **no** corridors defined (`REGIONS[key].corridors === null`, currently Singapore) always reports `route: 'unclassified'` — there's no Hormuz-style politically-distinct lane split to classify there, and forcing one would be product dishonesty, not a real signal.
+
+> Hormuz's polygon vertices are rough placeholders. Calibrate by plotting a week of real tracks and tracing the two observed lanes. This calibration is the single most important pre-launch task for any region that wants a real route split — it's the product's differentiator where it applies.
 
 ### 6.4 "Gone dark" metric
 
-A vessel is *dark* if it was seen inside the ROI moving (sog > 1 kn) and then produced no positions for > 6 h without having exited via a gate. Computed by the worker; displayed as a 24 h count with the honest caveat that receiver coverage gaps also cause this.
+A vessel is *dark* if it was seen inside a region's ROI moving (sog > 1 kn) and then produced no positions for > 6 h without having exited via a gate. Computed by the worker per region; displayed as a 24 h count with the honest caveat that receiver coverage gaps also cause this — see §4.1.1 for just how large those gaps can be.
 
 ---
 
 ## 7. API
 
-Fastify, JSON, all responses cached (in-process LRU + `Cache-Control`).
+Fastify, JSON, all responses cached per-region (in-process LRU + `Cache-Control`). Every endpoint below except `/api/v1/regions` and `/healthz` takes a `?region=` query param (default `hormuz`); an unknown region returns `400` with the list of known regions.
 
 | endpoint | cache | returns |
 |---|---|---|
-| `GET /api/v1/live` | 30 s | latest position per vessel seen in last 2 h (map dots) |
-| `GET /api/v1/stats/daily?days=30` | 5 min | daily transit counts by direction and route |
-| `GET /api/v1/stats/headline` | 5 min | today's transits, 7-day avg, route split %, dark count |
-| `GET /api/v1/incidents` | 5 min | curated incident list |
-| `GET /api/v1/vessel/:mmsi/track?hours=24` | 60 s | recent track for click-through |
-| `GET /healthz` | none | ingest lag, db status, last message age |
+| `GET /api/v1/regions` | none | list of configured regions: key, name, map center/zoom, gates, corridors — lets the frontend build a region switcher without duplicating `geo.js` |
+| `GET /api/v1/live?region=` | 30 s | latest position per vessel seen in last 2 h, within the region (map dots) |
+| `GET /api/v1/stats/daily?region=&days=30` | 5 min | daily transit counts by direction and route, within the region |
+| `GET /api/v1/stats/headline?region=` | 5 min | today's transits, 7-day avg, route split % (whatever routes the region actually uses), dark count |
+| `GET /api/v1/incidents?region=` | 5 min | curated incident list filtered to the region |
+| `GET /api/v1/vessel/:mmsi/track?region=&hours=24` | 60 s | recent track for click-through, within the region |
+| `GET /healthz` | none | ingest lag, db status, last message age (global, not region-scoped) |
 
 Rate limiting: 60 req/min/IP at the Caddy/CloudFront layer. No auth in v1.
 
@@ -210,14 +250,15 @@ Rate limiting: 60 req/min/IP at the Caddy/CloudFront layer. No auth in v1.
 
 ## 8. Frontend
 
-Static SPA (Vite + React or plain Vite + vanilla — builder's choice; no SSR).
+Static SPA (Vite + vanilla JS; no framework, no SSR).
 
 **Layout (single page):**
-1. Headline stat bar — today's transits, 7-day average, northern/southern split %, vessels gone dark (24 h).
-2. MapLibre GL map — live vessel dots (colored by type), corridor polygon overlays (toggleable), gate lines, incident markers.
-3. Daily transit chart — stacked bars (northern/southern/mixed) over 30 days, Recharts or D3.
-4. Incident timeline — reverse-chronological list from `incidents.yaml`.
-5. Footer — data-source attribution, methodology link, and disclaimer.
+1. **Region switcher** — a `<select>` in the header (populated from `src/geo.js` `REGIONS`, imported directly rather than round-tripping through `/api/v1/regions`, matching the map module's existing pattern). Switching region recenters/rezooms the map, swaps the corridor/gate overlays, and re-fetches every data section below for the new region. Choice persists in `localStorage`.
+2. Headline stat bar — today's transits, 7-day average, route split % (rendered from whatever route names the current region's API response actually contains — `northern`/`southern`/`mixed` for Hormuz, `unclassified` for Singapore — not hardcoded to Hormuz's vocabulary), vessels gone dark (24 h).
+3. MapLibre GL map — live vessel dots (colored by type), corridor polygon overlays (toggleable, empty for regions with no corridors), gate lines, incident markers.
+4. Daily transit chart — stacked bars over 30 days, colors/legend/table columns generated from whatever route names are present in the response (known names get fixed colors; anything else falls back to a rotating palette) rather than assuming Hormuz's three-route set.
+5. Incident timeline — reverse-chronological list from `incidents.yaml`, filtered to the selected region.
+6. Footer — data-source attribution, methodology link, and disclaimer.
 
 **Mandatory disclaimer (footer + first-visit banner):**
 > "Not for navigation. Positions come from volunteer terrestrial AIS receivers and may be delayed, incomplete, or spoofed. Transit counts are estimates."
@@ -246,6 +287,7 @@ Static SPA (Vite + React or plain Vite + vanilla — builder's choice; no SSR).
 | M3 | API + minimal map frontend deployed behind domain, TLS | 4 days |
 | M4 | Charts, incidents, disclaimer, polish; Terraform + CI complete | 3 days |
 | M5 | Launch: README with architecture diagram, methodology page, post to r/dataisbeautiful / HN Show | 1 day |
+| M6 | Multi-region refactor: `REGIONS` config, region column across schema/API/frontend, region switcher; Singapore Strait added as region #2 after passing the §4.1.1 coverage check | done 2026-07-04 |
 
 ---
 
@@ -253,11 +295,12 @@ Static SPA (Vite + React or plain Vite + vanilla — builder's choice; no SSR).
 
 | Risk | Mitigation |
 |---|---|
-| News cycle ends (deal signed) | Brand as chokepoint tracker, not Hormuz-only; ROI is one config value — Bab el-Mandeb is a copy-paste expansion |
-| AISStream outage / ToS change | Ingest is behind one module (`src/ais.js`); alternative feeds swappable. Show "data delayed" banner from `/healthz` state |
-| Sparse receiver coverage mid-strait | Expected; transit detection uses gates near coasts where coverage is better; surface coverage honestly |
-| Misclassification embarrassment | Publish methodology page; label counts as estimates; keep raw thresholds in one config file |
+| News cycle ends (deal signed) | **Done, not hypothetical:** brand as chokepoint tracker, not Hormuz-only. Multi-region support landed 2026-07-04 (`REGIONS` config in `src/geo.js`); Singapore Strait is region #2. Bab-el-Mandeb was evaluated and explicitly **rejected for now** — see next row. |
+| AISStream outage / ToS change | Ingest is behind one module (`src/ingest.js` + `src/geo.js`); alternative feeds swappable. Show "data delayed" banner from `/healthz` state |
+| Terrestrial coverage gaps, incl. total dead zones | **Revised after §4.1.1's survey — the original "gates near coasts have better coverage" mitigation was wrong for Hormuz.** Coastal Hormuz gates get zero coverage because there are no nearby volunteer receivers at all (Iranian/Omani coastline), not because mid-channel is specifically harder than the coastline. The real mitigation: **empirically test any candidate region's live AISStream coverage before building gates/corridors for it** (§4.1.1's method — subscribe, count raw messages over a fixed window). This is now a hard gate before adding a region, not an assumption. Confirmed dead so far: Hormuz, Bab-el-Mandeb, Malacca Strait's narrowest point. Confirmed good: Singapore Strait, Dover Strait, Öresund. Fixing Hormuz specifically requires a satellite AIS feed (candidate: VesselFinder, ~€330 min, explicit per-record satellite pricing) — not yet implemented. |
+| Misclassification embarrassment | Publish methodology page; label counts as estimates; keep raw thresholds in one config file (per-region, in `REGIONS`) |
 | Geopolitical sensitivity | Facts only: positions, counts, sourced incidents. No editorializing, no targeting-useful real-time detail beyond what public trackers already show |
+| A new region "looks" well-covered but isn't (Malacca-Strait-shaped surprise) | Never trust general area reputation or shipping-volume fame. Always run the live coverage test at the *exact* candidate gate coordinates, not just "somewhere in the strait" — coverage can flip from excellent to zero within the same waterway (§4.1.1) |
 
 ---
 
@@ -271,15 +314,14 @@ strait-tracker/
 ├── sql/
 │   └── schema.sql
 ├── src/
-│   ├── ingest.js            ← AISStream websocket consumer
-│   ├── worker.js            ← transit detector (5-min loop)
-│   ├── api.js               ← Fastify REST API (M3)
-│   ├── ais.js               ← feed abstraction
-│   ├── geo.js               ← ROI, gates, corridors, point-in-polygon
+│   ├── ingest.js            ← AISStream websocket consumer (subscribes all regions at once)
+│   ├── worker.js            ← transit detector (5-min loop, per (region, mmsi))
+│   ├── api.js               ← Fastify REST API (M3), region-scoped
+│   ├── geo.js               ← REGIONS config: per-region ROI/gates/corridors, point-in-polygon (M6)
 │   └── db.js                ← pg pool + batched inserts
 ├── data/
-│   └── incidents.yaml
-├── web/                     ← frontend (M3)
+│   └── incidents.yaml       ← region-tagged
+├── web/                     ← frontend (M3), region switcher (M6)
 ├── terraform/               ← infra (M4)
 └── .github/workflows/       ← CI/CD (M4)
 ```
