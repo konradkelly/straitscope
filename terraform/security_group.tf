@@ -1,8 +1,15 @@
 resource "aws_security_group" "app" {
   name        = "${var.project_name}-app"
-  description = "Strait Tracker app server: SSH from admin IP only, HTTP/HTTPS public"
+  description = "Strait Tracker app server: HTTP/HTTPS public, no inbound SSH. Admin access and CI/CD deploys go through AWS SSM."
   vpc_id      = data.aws_vpc.default.id
 
+  # AWS doesn't allow updating a security group's top-level description via
+  # its API (only rule-level descriptions) -- any change to this field is
+  # ForceNew. Plain destroy-then-create (the default) is fine as long as
+  # nothing is still attached to the old group when it's destroyed --
+  # create_before_destroy was tried here but doesn't work for a fixed-name
+  # security group: AWS enforces unique names per VPC, so the replacement
+  # can't be created while the original (same name) still exists.
   ingress {
     description = "HTTP (redirect to HTTPS + ACME HTTP-01 challenge)"
     from_port   = 80
