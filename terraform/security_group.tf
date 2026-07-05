@@ -12,6 +12,14 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
+    description = "SSH from anywhere (CI/CD deploy runners have no stable IP range)"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "HTTP (redirect to HTTPS + ACME HTTP-01 challenge)"
     from_port   = 80
     to_port     = 80
