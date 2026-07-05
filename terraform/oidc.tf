@@ -57,6 +57,16 @@ resource "aws_iam_role_policy" "github_deploy" {
         Effect   = "Allow"
         Action   = ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands"]
         Resource = "*"
+      },
+      {
+        # Lets CI look up the current app instance by tag at deploy time
+        # (ci-cd.yml) instead of relying on a manually-set EC2_INSTANCE_ID
+        # repo variable, which goes stale every time Terraform replaces the
+        # instance (ec2:DescribeInstances has no resource-level scoping).
+        Sid      = "FindDeployTarget"
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeInstances"]
+        Resource = "*"
       }
     ]
   })
