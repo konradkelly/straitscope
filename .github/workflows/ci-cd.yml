@@ -32,6 +32,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -66,49 +67,81 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
       - name: Write server .env
         run: |
-          mkdir -p tmp
-          cat > tmp/deploy.env <<EOF
+          cat > deploy.env <<EOF
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           AISSTREAM_API_KEY=${{ secrets.AISSTREAM_API_KEY }}
           EOF
 
-      - name: Copy app files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml,sql/schema.sql,data/incidents.yaml,web/dist/**"
-          target: /opt/straitscope
-          strip_components: 0
+      - name: Upload release artifacts to S3
+        run: |
+          PREFIX="s3://${{ vars.DEPLOY_ARTIFACTS_BUCKET }}/releases/${{ github.sha }}"
+          aws s3 cp docker-compose.prod.yml "$PREFIX/docker-compose.prod.yml"
+          aws s3 cp sql/schema.sql "$PREFIX/schema.sql"
+          aws s3 cp data/incidents.yaml "$PREFIX/incidents.yaml"
+          aws s3 sync web/dist "$PREFIX/web-dist/" --delete
+          aws s3 cp deploy.env "$PREFIX/deploy.env"
 
-      - name: Copy .env to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: tmp/deploy.env
-          target: /opt/straitscope
+      - name: Deploy via SSM
+        run: |
+          PREFIX="s3://${{ vars.DEPLOY_ARTIFACTS_BUCKET }}/releases/${{ github.sha }}"
+          COMMANDS=$(jq -n --arg prefix "$PREFIX" --arg tag "${{ github.sha }}" \
+            --arg token "${{ secrets.GITHUB_TOKEN }}" --arg actor "${{ github.actor }}" '
+            [
+              "set -euo pipefail",
+              "mkdir -p /opt/straitscope/sql /opt/straitscope/data /opt/straitscope/web/dist",
+              "cd /opt/straitscope",
+              ("aws s3 cp " + $prefix + "/docker-compose.prod.yml docker-compose.prod.yml"),
+              ("aws s3 cp " + $prefix + "/schema.sql sql/schema.sql"),
+              ("aws s3 cp " + $prefix + "/incidents.yaml data/incidents.yaml"),
+              ("aws s3 sync " + $prefix + "/web-dist/ web/dist/ --delete"),
+              ("aws s3 cp " + $prefix + "/deploy.env .env"),
+              ("echo '" + $token + "' | docker login ghcr.io -u " + $actor + " --password-stdin"),
+              ("export IMAGE_TAG=" + $tag),
+              "docker compose -f docker-compose.prod.yml pull",
+              "docker compose -f docker-compose.prod.yml up -d",
+              "docker image prune -f"
+            ]')
 
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -euo pipefail
-            cd /opt/straitscope
-            mv tmp/deploy.env .env
-            rmdir tmp 2>/dev/null || true
-            echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-            export IMAGE_TAG="${{ github.sha }}"
-            sudo docker compose -f docker-compose.prod.yml pull
-            sudo docker compose -f docker-compose.prod.yml up -d
-            sudo docker image prune -f
+          PAYLOAD=$(jq -n --argjson commands "$COMMANDS" '{commands: $commands}')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ vars.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "straitscope deploy ${{ github.sha }}" \
+            --parameters "$PAYLOAD" \
+            --query "Command.CommandId" --output text)
+
+          echo "COMMAND_ID=$COMMAND_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for SSM deploy to finish
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "${{ vars.EC2_INSTANCE_ID }}" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            echo "attempt $i: $STATUS"
+            case "$STATUS" in
+              Success) exit 0 ;;
+              Failed|Cancelled|TimedOut)
+                echo "--- stdout ---"
+                aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.EC2_INSTANCE_ID }}" --query "StandardOutputContent" --output text
+                echo "--- stderr ---"
+                aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ vars.EC2_INSTANCE_ID }}" --query "StandardErrorContent" --output text
+                echo "::error::SSM command ended with status $STATUS"
+                exit 1 ;;
+              *) sleep 5 ;;
+            esac
+          done
+          echo "::error::SSM command did not complete within timeout"
+          exit 1
 
       - name: Smoke-check /healthz
         run: |
