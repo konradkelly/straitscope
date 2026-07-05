@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # Bootstraps the box: Docker + Compose plugin, Caddy (TLS via Let's Encrypt),
-# and the /opt/straitscope app directory. GitHub Actions handles the
-# actual app deploy (scp docker-compose.yml/.env/web-dist, `docker compose
-# up -d`) per spec.md sec9 CI/CD -- this script only prepares the host.
+# and the /opt/straitscope app directory. GitHub Actions handles the actual
+# app deploy (upload release artifacts to S3, `aws ssm send-command` runs
+# `docker compose up -d` on the box) -- this script only prepares the host.
 set -euxo pipefail
 
 apt-get update -y
 apt-get install -y ca-certificates curl gnupg debian-keyring debian-archive-keyring apt-transport-https
+
+# SSM Agent: the Canonical AMI ships this as a pre-installed snap, but
+# don't assume it's enabled -- this is the only admin/deploy access path
+# once SSH ingress is removed from the security group.
+snap install amazon-ssm-agent --classic || true
+snap start amazon-ssm-agent || true
+systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service || true
+systemctl restart snap.amazon-ssm-agent.amazon-ssm-agent.service || true
 
 # Docker
 install -m 0755 -d /etc/apt/keyrings

@@ -17,3 +17,18 @@ output "backups_bucket" {
   value       = aws_s3_bucket.backups.bucket
   description = "S3 bucket for nightly pg_dump backups (transits, daily_stats, vessels)."
 }
+
+output "deploy_artifacts_bucket" {
+  value       = aws_s3_bucket.deploy_artifacts.bucket
+  description = "S3 bucket CI uploads deploy artifacts to; set as the DEPLOY_ARTIFACTS_BUCKET repo variable."
+}
+
+output "instance_id" {
+  value       = aws_instance.app.id
+  description = "EC2 instance ID; set as the EC2_INSTANCE_ID repo variable for SSM-triggered deploys."
+}
+
+output "github_deploy_role_arn" {
+  value       = aws_iam_role.github_deploy.arn
+  description = "Role GitHub Actions assumes via OIDC to deploy; set as the AWS_DEPLOY_ROLE_ARN repo variable."
+}
