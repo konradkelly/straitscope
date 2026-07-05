@@ -113,7 +113,7 @@ jobs:
       - name: Smoke-check /healthz
         run: |
           for i in $(seq 1 10); do
-            body=$(curl -fsS https://straitscope.com/healthz || true)
+            body=$(curl -sS https://straitscope.com/healthz || true)
             echo "attempt $i: $body"
             if echo "$body" | grep -q '"db":"ok"'; then
               exit 0
