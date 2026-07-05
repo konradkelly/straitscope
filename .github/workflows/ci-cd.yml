@@ -104,7 +104,7 @@ jobs:
               ("aws s3 cp " + $prefix + "/incidents.yaml data/incidents.yaml"),
               ("aws s3 sync " + $prefix + "/web-dist/ web/dist/ --delete"),
               ("aws s3 cp " + $prefix + "/deploy.env .env"),
-              ("echo '" + $token + "' | docker login ghcr.io -u " + $actor + " --password-stdin"),
+              ("echo " + ($token | @sh) + " | docker login ghcr.io -u " + $actor + " --password-stdin"),
               ("export IMAGE_TAG=" + $tag),
               "docker compose -f docker-compose.prod.yml pull",
               "docker compose -f docker-compose.prod.yml up -d",
