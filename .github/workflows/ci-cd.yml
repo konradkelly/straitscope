@@ -115,6 +115,11 @@ jobs:
               ("aws s3 cp " + $prefix + "/docker-compose.prod.yml docker-compose.prod.yml"),
               ("aws s3 cp " + $prefix + "/schema.sql sql/schema.sql"),
               ("aws s3 cp " + $prefix + "/incidents.yaml data/incidents.yaml"),
+              # `sync` compares size/mtime, and hashed filenames of the same
+              # length (e.g. Vite's index-XXXXXXXX.js) can look "unchanged" to
+              # that heuristic across builds - clear the dir first so every
+              # file is always freshly written.
+              "rm -rf web/dist/*",
               ("aws s3 sync " + $prefix + "/web-dist/ web/dist/ --delete"),
               ("aws s3 cp " + $prefix + "/deploy.env .env"),
               ("echo " + ($token | @sh) + " | docker login ghcr.io -u " + $actor + " --password-stdin"),
