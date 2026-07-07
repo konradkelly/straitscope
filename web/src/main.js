@@ -112,9 +112,17 @@ function updateCoverageNote(region) {
   if (text) note.querySelector('p').textContent = text;
 }
 
+// Route split is only meaningful for regions with named corridors (e.g.
+// Hormuz's northern/southern). Regions without them (e.g. Singapore) always
+// report 100% "unclassified", which reads as a bug rather than a feature.
+function updateSplitVisibility(region) {
+  document.querySelector('#stat-split').hidden = !REGIONS[region].corridors;
+}
+
 function loadAllForRegion(map, region) {
   document.querySelector('#region-subtitle').textContent = `Vessel traffic through the ${REGIONS[region].name}`;
   updateCoverageNote(region);
+  updateSplitVisibility(region);
   loadHeadline(region);
   loadChart(region);
   loadLive(map, region);
