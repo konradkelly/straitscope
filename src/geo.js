@@ -20,6 +20,15 @@
 // Strait, which has no Hormuz-style politically-distinct route split) gets
 // `null`, and classifyCorridor/classifyRoute degrade to 'unclassified'
 // rather than forcing a meaningless northern/southern label onto it.
+//
+// ⚠ Despite gate/corridor names nominally being free-form, worker.js's
+// transit state machine hardcodes two of them: direction is
+// `entered_gate === 'west' ? 'outbound' : 'inbound'`, and the per-transit
+// route tally only counts positions where `corridor === 'northern'` or
+// `'southern'` (see applyPosition/classifyRoute). A region that wants real
+// direction/route-split output — not just a transit count — must name its
+// gates `west`/`east` and its corridors `northern`/`southern`, regardless
+// of their actual compass bearing.
 // ---------------------------------------------------------------------------
 export const REGIONS = {
   hormuz: {
@@ -97,6 +106,42 @@ export const REGIONS = {
     routeThreshold: null,
     mapCenter: [103.85, 1.2],
     mapZoom: 9.5,
+  },
+
+  dover: {
+    name: 'Strait of Dover',
+    // Confirmed live coverage 2026-07-06 (9 msgs/30s test; see spec.md
+    // §4.1.1 addendum) — comparable to Singapore's launch survey.
+    // ⚠ Placeholder ROI/gates/corridors, eyeballed from a chart — not yet
+    // calibrated against real position density like Singapore's gates were.
+    // English Channel approach (west/southwest), the Dover-Calais narrows,
+    // and the North Sea approach (east/northeast).
+    roiBbox: [[50.8, 1.0], [51.5, 2.3]],
+    gates: {
+      // Channel side, off Folkestone/Boulogne — west of the narrows.
+      west: [[1.15, 51.1], [1.15, 50.85]],
+      // North Sea side, off North Foreland/the Belgian coast — east of the narrows.
+      east: [[2.05, 51.45], [2.05, 51.15]],
+    },
+    corridors: {
+      // northern ≈ English-coast-side TSS lane (England sits north of the strait)
+      northern: [
+        [1.15, 51.1],
+        [2.05, 51.45],
+        [2.05, 51.3],
+        [1.15, 50.98],
+      ],
+      // southern ≈ French/Belgian-coast-side TSS lane
+      southern: [
+        [1.15, 50.98],
+        [2.05, 51.3],
+        [2.05, 51.15],
+        [1.15, 50.85],
+      ],
+    },
+    routeThreshold: 0.7,
+    mapCenter: [1.6, 51.05],
+    mapZoom: 9,
   },
 };
 
