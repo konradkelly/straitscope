@@ -219,6 +219,10 @@ section[aria-label] > h2,
 .maplibregl-popup-content {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 0.85rem;
+  /* Popup background stays fixed white (maplibre-gl.css default), so text
+     color must stay fixed dark too — it must not inherit body's
+     dark-mode white, which would make it invisible. */
+  color: #0b0b0b;
 }
 
 #chart-section {
