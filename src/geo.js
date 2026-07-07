@@ -74,10 +74,21 @@ export const REGIONS = {
     // vs. 0 for Hormuz) — see spec.md §4.1 for the full survey.
     roiBbox: [[1.0, 103.4], [1.5, 104.3]],
     gates: {
-      // West gate: near Raffles Lighthouse, the Malacca Strait TSS transition
+      // West gate: near Raffles Lighthouse, the Malacca Strait TSS transition.
+      // Confirmed against 2026-07-05/06 live position data: this lon sits
+      // right at the real density cliff (~1k positions/day just west of it,
+      // ~8k+ just east), so it's already well-placed.
       west: [[103.75, 1.28], [103.75, 1.05]],
-      // East gate: approaching Horsburgh Lighthouse, the South China Sea transition
-      east: [[104.10, 1.35], [104.10, 1.15]],
+      // East gate: recalibrated 2026-07-06 from the original 104.10 (near
+      // Horsburgh Lighthouse) after live data showed terrestrial AIS
+      // coverage falls off a cliff past lon 104.00 (789 positions/36 vessels
+      // in the 103.95-104.00 bucket vs. 92 in 104.00-104.05 and 2 total past
+      // 104.10) — the old gate sat in a reception void where the "opposite
+      // crossing" a transit needs was almost never observable. Moved to
+      // 103.99, just inside the well-covered zone; lat range unchanged, it
+      // already comfortably covers the observed p10-p90 traffic spread
+      // (1.19-1.30) at this longitude.
+      east: [[103.99, 1.35], [103.99, 1.15]],
     },
     // No politically-distinct route split here (unlike Hormuz's Iran/Oman
     // corridors) — leave unset until/unless a real product need for one

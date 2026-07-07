@@ -197,9 +197,9 @@ Current gate definitions:
 | Region | West gate | East gate |
 |---|---|---|
 | Hormuz | (26.55°N, 55.70°E) → (25.90°N, 55.70°E) — Persian Gulf side | (26.10°N, 57.10°E) → (25.30°N, 57.10°E) — Gulf of Oman side |
-| Singapore | (1.28°N, 103.75°E) → (1.05°N, 103.75°E) — near Raffles Lighthouse, Malacca Strait transition | (1.35°N, 104.10°E) → (1.15°N, 104.10°E) — near Horsburgh Lighthouse, South China Sea transition |
+| Singapore | (1.28°N, 103.75°E) → (1.05°N, 103.75°E) — near Raffles Lighthouse, Malacca Strait transition | (1.35°N, 103.99°E) → (1.15°N, 103.99°E) — recalibrated 2026-07-06, see below |
 
-> All gate coordinates above are engineering placeholders — calibrate against a few days of real traffic before trusting the counts, and record final values in `src/geo.js`. This was already true for Hormuz pre-launch and is equally true for Singapore now.
+> Hormuz's gate coordinates remain engineering placeholders (uncalibratable while its terrestrial AIS coverage is zero — §4.1.1). Singapore's were calibrated 2026-07-06 against ~27 hours of live position data after launch showed 0 completed transits despite ~100 dark-vessel flags/day: the west gate (103.75°E) was already sitting right at the real density cliff (~1k positions/day just west of it vs. ~8k+ just east) and needed no change, but the original east gate (104.10°E, near Horsburgh Lighthouse) sat past where terrestrial coverage effectively ends — position density falls off a cliff after 103.75-104.00°E (789 positions/36 vessels in 103.95-104.00 vs. 92 in 104.00-104.05 and 2 total past 104.10) — so the "opposite crossing" a transit needs was almost never observable. Moved to 103.99°E, inside the well-covered band; the existing lat range already covered the observed traffic spread there, so it was left unchanged.
 
 ### 6.2 Transit state machine (per `(region, mmsi)`)
 

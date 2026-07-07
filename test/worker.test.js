@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { applyPosition, checkStaleness, classifyRoute, freshState } from '../src/worker.js';
 
 // Hormuz: west gate lon 55.7, lat 25.9–26.55. East gate lon 57.1, lat 25.3–26.1.
-// Singapore: west gate lon 103.75, lat 1.05–1.28. East gate lon 104.10, lat 1.15–1.35.
+// Singapore: west gate lon 103.75, lat 1.05–1.28. East gate lon 103.99, lat 1.15–1.35.
 // (see src/geo.js REGIONS)
 const westCrossing = (fromLon, toLon, lat = 26.2) => [
   { lon: fromLon, lat },
@@ -89,9 +89,9 @@ test('full transit in a region with no corridors comes back unclassified (singap
   const points = [
     { time: t0, lon: 103.70, lat: 1.2 },
     { time: t0 + 1000, lon: 103.80, lat: 1.2 },
-    { time: t0 + 2000, lon: 103.95, lat: 1.2 },
-    { time: t0 + 3000, lon: 104.05, lat: 1.25 },
-    { time: t0 + 4000, lon: 104.15, lat: 1.25 },
+    { time: t0 + 2000, lon: 103.94, lat: 1.2 },
+    { time: t0 + 3000, lon: 103.97, lat: 1.25 },
+    { time: t0 + 4000, lon: 104.04, lat: 1.25 },
   ];
   const { state, transit } = feed(s, 'singapore', points);
   assert.equal(state.state, 'IDLE');

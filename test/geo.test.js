@@ -83,9 +83,9 @@ test('crossedGate: eastward movement through singapore west gate', () => {
 });
 
 test('crossedGate: eastward movement through singapore east gate', () => {
-  // East gate is a vertical segment at lon 104.10 between lat 1.15 and 1.35
-  const before = [104.05, 1.25];
-  const after = [104.15, 1.25];
+  // East gate is a vertical segment at lon 103.99 between lat 1.15 and 1.35
+  const before = [103.94, 1.25];
+  const after = [104.04, 1.25];
   assert.equal(crossedGate('singapore', before, after), 'east');
 });
 
