@@ -79,12 +79,15 @@ export function initMap(container, regionKey) {
     map.on('click', 'vessels', (e) => {
       const f = e.features[0];
       const p = f.properties;
+      // flag is omitted below when unresolved (still common — see
+      // deriveFlag in src/geo.js) rather than shown as a misleading blank.
+      const details = [p.ship_type_class ?? 'other', p.flag, `${Math.round(p.sog ?? 0)} kn`]
+        .filter(Boolean)
+        .map(escapeHTML)
+        .join(' · ');
       new maplibregl.Popup()
         .setLngLat(f.geometry.coordinates.slice())
-        .setHTML(
-          `<strong>${escapeHTML(p.name || 'Unknown vessel')}</strong><br>` +
-            `${escapeHTML(p.ship_type_class ?? 'other')} · ${Math.round(p.sog ?? 0)} kn`
-        )
+        .setHTML(`<strong>${escapeHTML(p.name || 'Unknown vessel')}</strong><br>${details}`)
         .addTo(map);
     });
     map.on('mouseenter', 'vessels', () => (map.getCanvas().style.cursor = 'pointer'));
@@ -115,6 +118,7 @@ export function setVessels(map, vessels) {
         mmsi: v.mmsi,
         name: v.name,
         ship_type_class: v.ship_type_class ?? 'other',
+        flag: v.flag,
         sog: v.sog,
       },
     })),

@@ -82,7 +82,7 @@ export async function buildServer() {
     const { rows } = await pool.query(
       `SELECT DISTINCT ON (p.mmsi)
         p.mmsi, p.time, p.lat, p.lon, p.sog, p.cog, p.heading, p.corridor,
-        v.name, v.ship_type_class
+        v.name, v.ship_type_class, v.flag
       FROM vessel_positions p
       LEFT JOIN vessels v ON v.mmsi = p.mmsi
       WHERE p.region = $1 AND p.time > now() - interval '2 hours'

@@ -12,7 +12,7 @@
  */
 import WebSocket from 'ws';
 import fs from 'node:fs';
-import { REGIONS, findRegion, classifyCorridor, shipTypeClass } from './geo.js';
+import { REGIONS, findRegion, classifyCorridor, shipTypeClass, deriveFlag } from './geo.js';
 import { queuePosition, upsertVessel, shutdown } from './db.js';
 
 const API_KEY = process.env.AISSTREAM_API_KEY;
@@ -27,6 +27,13 @@ const HEARTBEAT_FILE = process.env.HEARTBEAT_FILE ?? '/tmp/ingest-last-message';
 let backoffMs = 1000;
 const BACKOFF_MAX = 60_000;
 let stats = { positions: 0, statics: 0, ignored: 0 };
+
+// Flag derivation needs only the MMSI, so it's cheap to backfill from a bare
+// PositionReport rather than waiting on a ShipStaticData message that may
+// never arrive. This set just avoids re-issuing the same upsert on every one
+// of a vessel's many position reports within a process's lifetime — it
+// resets on restart, which only costs a handful of harmless repeat upserts.
+const flaggedMmsi = new Set();
 
 function connect() {
   console.log('[ingest] connecting to AISStream…');
@@ -86,6 +93,16 @@ function connect() {
         region,
         corridor: classifyCorridor(region, lon, lat),
       });
+
+      if (!flaggedMmsi.has(mmsi)) {
+        flaggedMmsi.add(mmsi);
+        const flag = deriveFlag(mmsi);
+        if (flag) {
+          upsertVessel({ mmsi, flag }).catch((err) =>
+            console.error('[ingest] flag upsert failed:', err.message)
+          );
+        }
+      }
     } else if (msg.MessageType === 'ShipStaticData') {
       const s = msg.Message?.ShipStaticData;
       if (!s) return;
@@ -97,6 +114,7 @@ function connect() {
         name: (s.Name ?? meta.ShipName ?? '').trim() || null,
         shipType: Number.isFinite(type) ? type : null,
         shipTypeClass: Number.isFinite(type) ? shipTypeClass(type) : null,
+        flag: deriveFlag(mmsi),
       }).catch((err) => console.error('[ingest] vessel upsert failed:', err.message));
     } else {
       stats.ignored++;

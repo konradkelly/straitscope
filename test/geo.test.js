@@ -7,6 +7,7 @@ import {
   crossedGate,
   findRegion,
   shipTypeClass,
+  deriveFlag,
   REGIONS,
 } from '../src/geo.js';
 
@@ -99,6 +100,20 @@ test('shipTypeClass mapping', () => {
   assert.equal(shipTypeClass(84), 'tanker');
   assert.equal(shipTypeClass(70), 'cargo');
   assert.equal(shipTypeClass(30), 'other');
+});
+
+test('deriveFlag: reads the MID from a 9-digit MMSI', () => {
+  assert.equal(deriveFlag(563123456), 'Singapore');
+  assert.equal(deriveFlag(366123456), 'United States');
+  assert.equal(deriveFlag(636123456), 'Liberia');
+});
+
+test('deriveFlag: unassigned MID returns null', () => {
+  assert.equal(deriveFlag(999999999), null);
+});
+
+test('deriveFlag: accepts a numeric string, same as the rest of geo.js', () => {
+  assert.equal(deriveFlag('563123456'), 'Singapore');
 });
 
 test('gates are inside plausible ROI bounds, for every region', () => {

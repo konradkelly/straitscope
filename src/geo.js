@@ -11,6 +11,7 @@
  * Convention: all points are [lon, lat] (GeoJSON order), except `roiBbox`
  * which follows AISStream's own [lat, lon] SW→NE convention (see ingest.js).
  */
+import { MID_TO_FLAG } from './mid-codes.js';
 
 // ---------------------------------------------------------------------------
 // Region registry. Add a region by adding an entry here — ingest.js,
@@ -254,4 +255,16 @@ export function shipTypeClass(code) {
   if (code >= 80 && code <= 89) return 'tanker';
   if (code >= 70 && code <= 79) return 'cargo';
   return 'other';
+}
+
+/**
+ * Derive a vessel's flag state from its MMSI's Maritime Identification
+ * Digits (first 3 of the standard 9-digit form) — see mid-codes.js. Unlike
+ * ship_type_class, this needs no AIS message content beyond the MMSI
+ * itself, so it can be (and is) derived from a plain PositionReport rather
+ * than waiting on a ShipStaticData message that may never arrive.
+ */
+export function deriveFlag(mmsi) {
+  const mid = Math.floor(Number(mmsi) / 1_000_000);
+  return MID_TO_FLAG[mid] ?? null;
 }

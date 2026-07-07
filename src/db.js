@@ -62,18 +62,22 @@ export async function flushPositions() {
 }
 
 /**
- * Upsert vessel static data: { mmsi, name, shipType, shipTypeClass }
+ * Upsert vessel static data: { mmsi, name, shipType, shipTypeClass, flag }.
+ * Every field but mmsi is optional — e.g. ingest.js calls this with just
+ * { mmsi, flag } from a bare PositionReport, since flag (unlike the other
+ * columns) doesn't require a ShipStaticData message to derive.
  */
 export async function upsertVessel(v) {
   await pool.query(
-    `INSERT INTO vessels (mmsi, name, ship_type, ship_type_class, last_seen)
-     VALUES ($1, $2, $3, $4, now())
+    `INSERT INTO vessels (mmsi, name, ship_type, ship_type_class, flag, last_seen)
+     VALUES ($1, $2, $3, $4, $5, now())
      ON CONFLICT (mmsi) DO UPDATE SET
        name = COALESCE(EXCLUDED.name, vessels.name),
        ship_type = COALESCE(EXCLUDED.ship_type, vessels.ship_type),
        ship_type_class = COALESCE(EXCLUDED.ship_type_class, vessels.ship_type_class),
+       flag = COALESCE(EXCLUDED.flag, vessels.flag),
        last_seen = now()`,
-    [v.mmsi, v.name ?? null, v.shipType ?? null, v.shipTypeClass ?? null]
+    [v.mmsi, v.name ?? null, v.shipType ?? null, v.shipTypeClass ?? null, v.flag ?? null]
   );
 }
 
