@@ -174,3 +174,26 @@ jobs:
           done
           echo "::error::/healthz never reported a healthy db after deploy"
           exit 1
+
+      - name: Smoke-check frontend assets
+        run: |
+          # Catches index.html referencing a JS bundle that does not match
+          # what actually got deployed (e.g. a stale sync) - Caddy's SPA
+          # fallback serves index.html itself for the missing path, so the
+          # browser gets HTML where it expected a module script.
+          for i in $(seq 1 10); do
+            html=$(curl -sS https://straitscope.com/ || true)
+            asset=$(echo "$html" | grep -o '/assets/[^"]*\.js' | head -1)
+            if [ -n "$asset" ]; then
+              ctype=$(curl -sS -o /dev/null -w '%{content_type}' "https://straitscope.com$asset")
+              echo "attempt $i: asset=$asset content-type=$ctype"
+              case "$ctype" in
+                *javascript*) exit 0 ;;
+              esac
+            else
+              echo "attempt $i: no JS asset path found in /"
+            fi
+            sleep 5
+          done
+          echo "::error::frontend JS asset did not return a javascript content-type after deploy"
+          exit 1
