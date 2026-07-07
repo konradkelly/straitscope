@@ -144,6 +144,81 @@ export const REGIONS = {
     mapCenter: [1.6, 51.05],
     mapZoom: 9,
   },
+
+  gibraltar: {
+    name: 'Strait of Gibraltar',
+    // Confirmed live coverage 2026-07-07 (12 msgs/90s Atlantic side, 14
+    // msgs/90s Mediterranean side — both prospective gates checked
+    // separately per spec.md §4.1.1's Malacca lesson). This re-test
+    // contradicts the original 2026-07-03 survey's "marginal" 2 msgs/60s
+    // finding — see spec.md §4.1.1 for the corrected entry.
+    // ⚠ Placeholder ROI/gates/corridors, eyeballed from a chart — not yet
+    // calibrated against real position density.
+    // Atlantic approach (west), the Tarifa/Gibraltar narrows, and the
+    // Mediterranean/Alboran Sea approach (east). Spain sits north of the
+    // strait, Morocco south.
+    roiBbox: [[35.75, -5.7], [36.15, -5.15]],
+    gates: {
+      // Atlantic side, off Tarifa/Tangier — west of the narrows.
+      west: [[-5.65, 36.05], [-5.65, 35.78]],
+      // Mediterranean side, off Gibraltar/Ceuta — east of the narrows.
+      east: [[-5.25, 36.12], [-5.25, 35.85]],
+    },
+    corridors: {
+      // northern ≈ Spanish-coast-side TSS lane (Spain sits north of the strait)
+      northern: [
+        [-5.65, 36.05],
+        [-5.25, 36.12],
+        [-5.25, 36.0],
+        [-5.65, 35.92],
+      ],
+      // southern ≈ Moroccan-coast-side TSS lane
+      southern: [
+        [-5.65, 35.92],
+        [-5.25, 36.0],
+        [-5.25, 35.85],
+        [-5.65, 35.78],
+      ],
+    },
+    routeThreshold: 0.7,
+    mapCenter: [-5.4, 35.95],
+    mapZoom: 9.5,
+  },
+
+  oresund: {
+    name: 'Öresund',
+    // Confirmed live coverage 2026-07-07 (15 msgs/90s Helsingor/Helsingborg
+    // narrows, 13 msgs/90s Copenhagen/Malmo narrows — both prospective
+    // gates checked separately). Excellent, consistent with the original
+    // 2026-07-03 survey (16 msgs/25s) — see spec.md §4.1.1.
+    // ⚠ Placeholder ROI/gates — not yet calibrated against real position
+    // density.
+    // Runs north-south (Kattegat approach north, Baltic approach south),
+    // unlike every other configured region's east-west axis — gate keys
+    // are still 'west'/'east' per the worker.js convention (§6.2), so
+    // 'west' here means the north gate and 'east' means the south gate;
+    // 'outbound' therefore means Kattegat/North Sea → Baltic (southbound).
+    roiBbox: [[55.4, 12.4], [56.2, 13.05]],
+    gates: {
+      // North gate: Helsingor (Denmark) / Helsingborg (Sweden) narrows,
+      // the Kattegat approach — named 'west' per the worker.js convention.
+      west: [[12.55, 56.1], [12.85, 56.1]],
+      // South gate: Copenhagen (Denmark) / Malmo (Sweden) narrows, the
+      // Baltic approach — named 'east' per the worker.js convention.
+      east: [[12.55, 55.5], [12.95, 55.5]],
+    },
+    // The Sound does have two named channels (Drogden, near the Danish
+    // side; Flinterrenden, near the Swedish side) but they're a
+    // draft-based routing choice around the bridge/tunnel crossing near
+    // the south gate, not a full-length directional lane split like
+    // Hormuz's or Gibraltar's TSS corridors — forcing a northern/southern
+    // label onto that would be the same product dishonesty called out for
+    // Singapore. Leave unset until/unless a real product need shows up.
+    corridors: null,
+    routeThreshold: null,
+    mapCenter: [12.7, 55.8],
+    mapZoom: 8.5,
+  },
 };
 
 /**

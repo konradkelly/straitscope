@@ -1,6 +1,6 @@
 # Curated incident timeline — add entries via PR.
 # severity: info | attack | grounding | seizure
-# region: hormuz | singapore (see src/geo.js REGIONS) — defaults to hormuz if omitted
+# region: hormuz | singapore | dover | gibraltar | oresund (see src/geo.js REGIONS) — defaults to hormuz if omitted
 #
 # - date: 2026-07-01
 #   title: Container ship runs aground on unapproved route

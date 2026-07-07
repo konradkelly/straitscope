@@ -1,10 +1,10 @@
 # Strait Tracker — v1 Specification
 
-Real-time monitoring dashboard for vessel traffic through global maritime chokepoints. Launched single-region (Strait of Hormuz, with route-split classification between the Iranian "Route of Authority" and the southern Omani corridor); now multi-region, with the Singapore Strait added as the second tracked chokepoint. Each region gets daily transit counts and a curated incident timeline; route-split classification is opt-in per region since it depends on there being a real politically-meaningful lane split (Hormuz has one, Singapore Strait doesn't).
+Real-time monitoring dashboard for vessel traffic through global maritime chokepoints. Launched single-region (Strait of Hormuz, with route-split classification between the Iranian "Route of Authority" and the southern Omani corridor); now five regions — Singapore Strait, Dover Strait, Gibraltar, and Öresund have since been added as chokepoints #2 through #5. Each region gets daily transit counts and a curated incident timeline; route-split classification is opt-in per region since it depends on there being a real politically- or navigationally-meaningful lane split (Hormuz, Dover, and Gibraltar have one; Singapore Strait and Öresund don't).
 
 **Author:** Konrad Kelly
 **Status:** Draft v1
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-07
 
 ---
 
@@ -115,6 +115,18 @@ This prompted a broader empirical survey — the same live-connection test (subs
 
 **Process implication:** a region must pass this live-connection coverage check *before* any gate/corridor calibration work is done on it — "this general area seems well-populated" is not sufficient, since coverage can flip from excellent to zero within the same strait depending on exactly where the gate line sits.
 
+#### 4.1.1 addendum (2026-07-07): Taiwan Strait, Gibraltar re-test, Öresund re-test
+
+Evaluated three more candidates for a multi-region pass, applying the process implication above: live-connection test first, gate/corridor work only if it passes. This time each candidate was tested with **two separate bounding boxes, one per prospective gate side**, over a 90 s window — the Malacca lesson (§4.1.1 above) is that coverage can be excellent on one side of a strait and dead on the other, so a single combined count for the whole ROI can hide a one-sided dead zone.
+
+| Region | Side A | Side B | Verdict |
+|---|---|---|---|
+| Taiwan Strait | Kinmen/Xiamen: 0 msgs/90s | Pingtan/Hsinchu: 1 msg/90s | **Dead zone** — same pattern as Hormuz/Bab-el-Mandeb, no nearby volunteer receivers on either the mainland-China or Taiwan coastline at the tested points |
+| Gibraltar | Atlantic/Tarifa side: 12 msgs/90s | Mediterranean/Ceuta side: 14 msgs/90s | **Good, both sides — selected as region #4.** Corrects the original 2026-07-03 survey's "marginal, 2 msgs/60s" single-box result; likely an artifact of that test's narrower box or a quieter moment, not a real dead zone |
+| Öresund | Helsingør/Helsingborg (north): 15 msgs/90s | Copenhagen/Malmö (south): 13 msgs/90s | **Excellent, both sides — selected as region #5.** Consistent with the original survey's 16 msgs/25s |
+
+Taiwan Strait is rejected for now — not added as a region, no gates/corridors built for it. Per the process implication, it stays out of scope until a satellite feed or a materially different candidate gate location is worth testing.
+
 **Path forward for Hormuz specifically (not yet built):** a satellite AIS feed is required to ever get real transit counts there. A provider survey (VesselFinder, Datalastic, Spire/Kpler, ORBCOMM/S&P, NavAPI, DataDocked, AISHub) found the market has consolidated into two enterprise-only platforms (Kpler, S&P Global) plus a handful of independent developer-tier APIs. VesselFinder is the leading candidate: an explicit, published per-record satellite AIS credit cost (10 credits/record vs. 1 for terrestrial) with no monthly minimum beyond a small initial credit purchase — the only option surveyed with both real satellite coverage and pay-as-you-go pricing suited to this project's scale. This is tracked as future work (§11), not implemented in this multi-region pass, which instead added Singapore Strait — a region that works today on the existing free feed.
 
 ### 4.2 Incidents — manual curation
@@ -135,7 +147,7 @@ See `sql/schema.sql` for authoritative DDL. Summary:
 
 ### 5.1 Region registry (`src/geo.js` `REGIONS`, not a DB table)
 
-Every table below carries a `region TEXT` column (default `'hormuz'` for backward compatibility) whose valid values are the keys of the `REGIONS` config object — currently `hormuz` and `singapore`. Each entry defines: `roiBbox` (AISStream subscription box), `gates` (named gate line segments — a region can have any gate names, though `west`/`east` is the convention so far), `corridors` (optional named polygons for route classification — `null` if the region has no politically-distinct lane split), `routeThreshold`, and frontend map center/zoom. Adding a region is an entry in this object plus real gate/corridor calibration — see §4.1.1 for the coverage check that must pass first.
+Every table below carries a `region TEXT` column (default `'hormuz'` for backward compatibility) whose valid values are the keys of the `REGIONS` config object — currently `hormuz`, `singapore`, `dover`, `gibraltar`, and `oresund`. Each entry defines: `roiBbox` (AISStream subscription box), `gates` (named gate line segments — a region can have any gate names, though `west`/`east` is the convention so far), `corridors` (optional named polygons for route classification — `null` if the region has no politically-distinct lane split), `routeThreshold`, and frontend map center/zoom. Adding a region is an entry in this object plus real gate/corridor calibration — see §4.1.1 for the coverage check that must pass first.
 
 ### 5.2 `vessels`
 Static registry keyed by MMSI. Not region-scoped — a vessel keeps one identity as it moves between regions. Upserted from `ShipStaticData` messages.
@@ -198,8 +210,13 @@ Current gate definitions:
 |---|---|---|
 | Hormuz | (26.55°N, 55.70°E) → (25.90°N, 55.70°E) — Persian Gulf side | (26.10°N, 57.10°E) → (25.30°N, 57.10°E) — Gulf of Oman side |
 | Singapore | (1.28°N, 103.75°E) → (1.05°N, 103.75°E) — near Raffles Lighthouse, Malacca Strait transition | (1.35°N, 103.99°E) → (1.15°N, 103.99°E) — recalibrated 2026-07-06, see below |
+| Dover | (51.10°N, 1.15°E) → (50.85°N, 1.15°E) — Channel side, off Folkestone/Boulogne | (51.45°N, 2.05°E) → (51.15°N, 2.05°E) — North Sea side, off North Foreland/the Belgian coast |
+| Gibraltar | (36.05°N, 5.65°W) → (35.78°N, 5.65°W) — Atlantic side, off Tarifa/Tangier | (36.12°N, 5.25°W) → (35.85°N, 5.25°W) — Mediterranean side, off Gibraltar/Ceuta |
+| Öresund | (56.10°N, 12.55°E) → (56.10°N, 12.85°E) — north gate, Helsingør/Helsingborg narrows (named `west` per the worker.js gate-key convention — see below) | (55.50°N, 12.55°E) → (55.50°N, 12.95°E) — south gate, Copenhagen/Malmö narrows (named `east`) |
 
-> Hormuz's gate coordinates remain engineering placeholders (uncalibratable while its terrestrial AIS coverage is zero — §4.1.1). Singapore's were calibrated 2026-07-06 against ~27 hours of live position data after launch showed 0 completed transits despite ~100 dark-vessel flags/day: the west gate (103.75°E) was already sitting right at the real density cliff (~1k positions/day just west of it vs. ~8k+ just east) and needed no change, but the original east gate (104.10°E, near Horsburgh Lighthouse) sat past where terrestrial coverage effectively ends — position density falls off a cliff after 103.75-104.00°E (789 positions/36 vessels in 103.95-104.00 vs. 92 in 104.00-104.05 and 2 total past 104.10) — so the "opposite crossing" a transit needs was almost never observable. Moved to 103.99°E, inside the well-covered band; the existing lat range already covered the observed traffic spread there, so it was left unchanged.
+> Hormuz's gate coordinates remain engineering placeholders (uncalibratable while its terrestrial AIS coverage is zero — §4.1.1). Singapore's were calibrated 2026-07-06 against ~27 hours of live position data after launch showed 0 completed transits despite ~100 dark-vessel flags/day: the west gate (103.75°E) was already sitting right at the real density cliff (~1k positions/day just west of it vs. ~8k+ just east) and needed no change, but the original east gate (104.10°E, near Horsburgh Lighthouse) sat past where terrestrial coverage effectively ends — position density falls off a cliff after 103.75-104.00°E (789 positions/36 vessels in 103.95-104.00 vs. 92 in 104.00-104.05 and 2 total past 104.10) — so the "opposite crossing" a transit needs was almost never observable. Moved to 103.99°E, inside the well-covered band; the existing lat range already covered the observed traffic spread there, so it was left unchanged. Dover, Gibraltar, and Öresund's gates are all still engineering placeholders, eyeballed from a chart — none has been calibrated against real position density the way Singapore's were (§6.1's italicized warning at the top of `geo.js` applies).
+>
+> Öresund is the only configured region whose strait runs north-south rather than east-west; its `west`/`east` gate keys are a naming convention only (required by `worker.js`'s hardcoded direction logic, §6.2), not a compass direction — `west` is physically the north gate, `east` is physically the south gate.
 
 ### 6.2 Transit state machine (per `(region, mmsi)`)
 
@@ -210,17 +227,17 @@ IN_STRAIT ──no positions for 48 h── ► ABANDONED → IDLE   (vessel dar
 IN_STRAIT ──re-cross same gate──► IDLE            (turned back; no transit recorded)
 ```
 
-`direction` is always derived the same way (`entered_gate === 'west' ? 'outbound' : 'inbound'`) but its real-world meaning is region-specific: for Hormuz, outbound means Persian Gulf → Gulf of Oman; for Singapore, outbound means Malacca Strait → South China Sea. Runs in the `worker` process every 5 minutes over positions since the last watermark (shared across regions — one time-ordered sweep, each row already tagged with its own `region`). State persisted in `transit_state`, keyed by `(region, mmsi)`, so restarts are safe (idempotent by watermark).
+`direction` is always derived the same way (`entered_gate === 'west' ? 'outbound' : 'inbound'`) but its real-world meaning is region-specific: for Hormuz, outbound means Persian Gulf → Gulf of Oman; for Singapore, outbound means Malacca Strait → South China Sea; for Dover, outbound means English Channel → North Sea; for Gibraltar, outbound means Atlantic → Mediterranean; for Öresund, outbound means Kattegat/North Sea → Baltic (its `west`/`east` gate keys are physically north/south — see §6.1). Runs in the `worker` process every 5 minutes over positions since the last watermark (shared across regions — one time-ordered sweep, each row already tagged with its own `region`). State persisted in `transit_state`, keyed by `(region, mmsi)`, so restarts are safe (idempotent by watermark).
 
 ### 6.3 Route classification
 
-Optional per region. A region with named corridors (currently only Hormuz) gets two hand-drawn polygons stored as GeoJSON in `src/geo.js` (`REGIONS.hormuz.corridors.northern` / `.southern` — traditional TSS lanes / Iranian-waters routing vs. the Omani coastal corridor). Each position gets a point-in-polygon check at insert time (ray casting; polygons have < 30 vertices, cost is negligible). A transit's `route` is:
+Optional per region. A region with named corridors (currently Hormuz, Dover, and Gibraltar) gets two hand-drawn polygons stored as GeoJSON in `src/geo.js` (e.g. `REGIONS.hormuz.corridors.northern` / `.southern` — traditional TSS lanes / Iranian-waters routing vs. the Omani coastal corridor; Dover and Gibraltar's are TSS-lane splits by coastline side rather than a political one). Each position gets a point-in-polygon check at insert time (ray casting; polygons have < 30 vertices, cost is negligible). A transit's `route` is:
 
 - `northern` if ≥ 70% of in-strait positions fall in the northern polygon
 - `southern` if ≥ 70% fall in the southern polygon
 - `mixed` otherwise
 
-A region with **no** corridors defined (`REGIONS[key].corridors === null`, currently Singapore) always reports `route: 'unclassified'` — there's no Hormuz-style politically-distinct lane split to classify there, and forcing one would be product dishonesty, not a real signal.
+A region with **no** corridors defined (`REGIONS[key].corridors === null`, currently Singapore and Öresund) always reports `route: 'unclassified'` — there's no politically- or navigationally-distinct lane split worth classifying there (Öresund's Drogden/Flinterrenden channel choice is draft-based, not directional — see the comment in `geo.js`), and forcing one would be product dishonesty, not a real signal.
 
 > Hormuz's polygon vertices are rough placeholders. Calibrate by plotting a week of real tracks and tracing the two observed lanes. This calibration is the single most important pre-launch task for any region that wants a real route split — it's the product's differentiator where it applies.
 
@@ -289,6 +306,8 @@ Static SPA (Vite + vanilla JS; no framework, no SSR).
 | M4 | Charts, incidents, disclaimer, polish; Terraform + CI complete | 3 days |
 | M5 | Launch: README with architecture diagram, methodology page, post to r/dataisbeautiful / HN Show | 1 day |
 | M6 | Multi-region refactor: `REGIONS` config, region column across schema/API/frontend, region switcher; Singapore Strait added as region #2 after passing the §4.1.1 coverage check | done 2026-07-04 |
+| M7 | Dover Strait added as region #3 after passing the §4.1.1 coverage check | done 2026-07-06 |
+| M8 | Gibraltar and Öresund added as regions #4 and #5 after passing the §4.1.1 addendum coverage check (per-gate-side re-test); Taiwan Strait evaluated and rejected (confirmed dead zone) | done 2026-07-07 |
 
 ---
 
@@ -296,9 +315,9 @@ Static SPA (Vite + vanilla JS; no framework, no SSR).
 
 | Risk | Mitigation |
 |---|---|
-| News cycle ends (deal signed) | **Done, not hypothetical:** brand as chokepoint tracker, not Hormuz-only. Multi-region support landed 2026-07-04 (`REGIONS` config in `src/geo.js`); Singapore Strait is region #2. Bab-el-Mandeb was evaluated and explicitly **rejected for now** — see next row. |
+| News cycle ends (deal signed) | **Done, not hypothetical:** brand as chokepoint tracker, not Hormuz-only. Multi-region support landed 2026-07-04 (`REGIONS` config in `src/geo.js`); five regions configured as of 2026-07-07 (Hormuz, Singapore, Dover, Gibraltar, Öresund). Bab-el-Mandeb and Taiwan Strait were both evaluated and explicitly **rejected for now** — see next row. |
 | AISStream outage / ToS change | Ingest is behind one module (`src/ingest.js` + `src/geo.js`); alternative feeds swappable. Show "data delayed" banner from `/healthz` state |
-| Terrestrial coverage gaps, incl. total dead zones | **Revised after §4.1.1's survey — the original "gates near coasts have better coverage" mitigation was wrong for Hormuz.** Coastal Hormuz gates get zero coverage because there are no nearby volunteer receivers at all (Iranian/Omani coastline), not because mid-channel is specifically harder than the coastline. The real mitigation: **empirically test any candidate region's live AISStream coverage before building gates/corridors for it** (§4.1.1's method — subscribe, count raw messages over a fixed window). This is now a hard gate before adding a region, not an assumption. Confirmed dead so far: Hormuz, Bab-el-Mandeb, Malacca Strait's narrowest point. Confirmed good: Singapore Strait, Dover Strait, Öresund. Fixing Hormuz specifically requires a satellite AIS feed (candidate: VesselFinder, ~€330 min, explicit per-record satellite pricing) — not yet implemented. |
+| Terrestrial coverage gaps, incl. total dead zones | **Revised after §4.1.1's survey — the original "gates near coasts have better coverage" mitigation was wrong for Hormuz.** Coastal Hormuz gates get zero coverage because there are no nearby volunteer receivers at all (Iranian/Omani coastline), not because mid-channel is specifically harder than the coastline. The real mitigation: **empirically test any candidate region's live AISStream coverage before building gates/corridors for it** (§4.1.1's method — subscribe, count raw messages over a fixed window, per prospective gate side since §4.1.1's addendum). This is now a hard gate before adding a region, not an assumption. Confirmed dead so far: Hormuz, Bab-el-Mandeb, Malacca Strait's narrowest point, Taiwan Strait. Confirmed good: Singapore Strait, Dover Strait, Öresund, Gibraltar (Gibraltar's initial "marginal" 2026-07-03 result was corrected to "good" on 2026-07-07 re-test — see §4.1.1 addendum). Fixing Hormuz specifically requires a satellite AIS feed (candidate: VesselFinder, ~€330 min, explicit per-record satellite pricing) — not yet implemented. |
 | Misclassification embarrassment | Publish methodology page; label counts as estimates; keep raw thresholds in one config file (per-region, in `REGIONS`) |
 | Geopolitical sensitivity | Facts only: positions, counts, sourced incidents. No editorializing, no targeting-useful real-time detail beyond what public trackers already show |
 | A new region "looks" well-covered but isn't (Malacca-Strait-shaped surprise) | Never trust general area reputation or shipping-volume fame. Always run the live coverage test at the *exact* candidate gate coordinates, not just "somewhere in the strait" — coverage can flip from excellent to zero within the same waterway (§4.1.1) |

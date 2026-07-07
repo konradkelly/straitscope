@@ -1,7 +1,8 @@
 # Strait Tracker
 
-Real-time Strait of Hormuz vessel traffic monitor with route-split classification
-(northern "Route of Authority" vs. southern Omani corridor).
+Real-time vessel traffic monitor for global maritime chokepoints (Strait of
+Hormuz, Singapore Strait, Strait of Dover, Gibraltar, Öresund), with
+route-split classification where a region has a real lane split.
 
 **Read `spec.md` first** — it's the authoritative design doc.
 
