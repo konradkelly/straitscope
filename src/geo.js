@@ -24,6 +24,12 @@
 export const REGIONS = {
   hormuz: {
     name: 'Strait of Hormuz',
+    // Confirmed 2026-07-03/04 (spec.md §4.1.1): zero terrestrial AISStream
+    // coverage over this ROI. Surfaced by the frontend so a zero-transit
+    // dashboard here reads as a known data-source limitation, not a bug.
+    coverageNote:
+      'No AIS coverage: AISStream has zero terrestrial receivers near the Strait of Hormuz. ' +
+      'Transit counts here are expected to stay at zero until a satellite AIS feed is integrated — see methodology.',
     // Persian Gulf approach, the strait itself, and the Gulf of Oman approach.
     roiBbox: [[25.0, 54.5], [27.8, 58.5]],
     gates: {

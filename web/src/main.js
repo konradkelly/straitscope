@@ -11,7 +11,10 @@ const REGION_KEY = 'straittracker-region';
 const LIVE_REFRESH_MS = 30_000;
 const HEADLINE_REFRESH_MS = 5 * 60_000;
 
-const DEFAULT_REGION = REGIONS.hormuz ? 'hormuz' : Object.keys(REGIONS)[0];
+// Singapore has live AIS coverage; Hormuz is a confirmed dead zone (see
+// coverageNote in src/geo.js) — default new visitors to a region that
+// actually shows data.
+const DEFAULT_REGION = REGIONS.singapore ? 'singapore' : Object.keys(REGIONS)[0];
 
 function initBanner() {
   const banner = document.querySelector('#disclaimer-banner');
@@ -102,8 +105,16 @@ if (!REGIONS[currentRegion]) currentRegion = DEFAULT_REGION;
 
 let liveTimer = null;
 
+function updateCoverageNote(region) {
+  const note = document.querySelector('#coverage-note');
+  const text = REGIONS[region].coverageNote;
+  note.hidden = !text;
+  if (text) note.querySelector('p').textContent = text;
+}
+
 function loadAllForRegion(map, region) {
   document.querySelector('#region-subtitle').textContent = `Vessel traffic through the ${REGIONS[region].name}`;
+  updateCoverageNote(region);
   loadHeadline(region);
   loadChart(region);
   loadLive(map, region);

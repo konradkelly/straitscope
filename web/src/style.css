@@ -107,6 +107,20 @@ main {
   white-space: nowrap;
 }
 
+.region-note {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--series-3);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 16px;
+}
+.region-note p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
 .stat-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

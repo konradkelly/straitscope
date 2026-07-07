@@ -32,7 +32,7 @@ export function renderChart(chartEl, tableEl, rows) {
 }
 
 function renderSvg(container, data, routes, routeColor) {
-  container.querySelectorAll('svg, .chart-tooltip, .chart-legend').forEach((el) => el.remove());
+  container.querySelectorAll('svg, .chart-tooltip, .chart-legend, .chart-empty').forEach((el) => el.remove());
 
   if (data.length === 0) {
     const empty = document.createElement('p');
