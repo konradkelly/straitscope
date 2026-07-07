@@ -126,7 +126,7 @@ export async function buildServer() {
       reply.header('Cache-Control', 'public, max-age=300');
       return hit;
     }
-    const [todayRes, weekRes, splitRes, darkRes] = await Promise.all([
+    const [todayRes, weekRes, splitRes, darkRes, vesselTypeRes] = await Promise.all([
       pool.query(
         `SELECT count(*)::int AS n FROM transits WHERE region = $1 AND exited_at::date = current_date`,
         [region]
@@ -145,6 +145,18 @@ export async function buildServer() {
          WHERE region = $1 AND detected_at >= now() - interval '24 hours'`,
         [region]
       ),
+      // Distinct vessels seen in-region over the same 24h window as the dark
+      // count, broken out by type — vessels never matched to a ShipStaticData
+      // message (v.ship_type_class IS NULL) count as 'other', same fallback
+      // the map already uses for undocumented vessels.
+      pool.query(
+        `SELECT COALESCE(v.ship_type_class, 'other') AS ship_type_class, count(DISTINCT p.mmsi)::int AS n
+         FROM vessel_positions p
+         LEFT JOIN vessels v ON v.mmsi = p.mmsi
+         WHERE p.region = $1 AND p.time > now() - interval '24 hours'
+         GROUP BY 1`,
+        [region]
+      ),
     ]);
 
     const weekTotal = weekRes.rows[0].n;
@@ -156,11 +168,16 @@ export async function buildServer() {
       splitRes.rows.map((r) => [r.route, pct(r.n)])
     );
 
+    const vessel_type_counts = Object.fromEntries(
+      vesselTypeRes.rows.map((r) => [r.ship_type_class, r.n])
+    );
+
     const data = {
       today_transits: todayRes.rows[0].n,
       seven_day_avg: Math.round((weekTotal / 7) * 10) / 10,
       route_split_pct,
       dark_vessel_count_24h: darkRes.rows[0].n,
+      vessel_type_counts,
     };
     headlineCache.set(region, data);
     reply.header('Cache-Control', 'public, max-age=300');

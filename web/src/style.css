@@ -148,6 +148,43 @@ main {
 .split-southern { color: var(--series-2); }
 .split-mixed, .split-unclassified { color: var(--series-3); }
 
+.vessel-mix-bar {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--gridline);
+}
+.vessel-mix-seg {
+  height: 100%;
+  cursor: pointer;
+}
+.vessel-mix-seg:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+.vessel-mix-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.vessel-mix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.vessel-mix-legend .swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: 0px;
+}
+
 section[aria-label] > h2,
 .section-head h2 {
   font-size: 1.05rem;
