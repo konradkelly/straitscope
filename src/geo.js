@@ -113,8 +113,25 @@ export const REGIONS = {
     name: 'Strait of Dover',
     // Confirmed live coverage 2026-07-06 (9 msgs/30s test; see spec.md
     // §4.1.1 addendum) — comparable to Singapore's launch survey.
-    // ⚠ Placeholder ROI/gates/corridors, eyeballed from a chart — not yet
-    // calibrated against real position density like Singapore's gates were.
+    // Corridors recalibrated 2026-07-09 against ~2 days of live production
+    // data (71.7k positions/623 vessels): the original eyeballed polygons
+    // traced a narrow "true TSS lane" width, which left 47% of positions
+    // (56.5% before the sog/cog filtering used for calibration) classified
+    // 'outside' either lane — starving classifyRoute's 70%-in-one-corridor
+    // threshold and driving the 96.7% "mixed" route split seen in prod. Real
+    // NE-bound (cog 20-70°, → North Sea) vs SW-bound (cog 200-250°, →
+    // Channel) traffic does split cleanly by latitude (percentile_cont on
+    // sog>3 positions in the 1.55-1.75°E and 1.85-2.00°E lon bands), so the
+    // separator line below is data-derived from that crossover — but the
+    // *outer* bounds are pushed out to the ROI edges rather than tracing a
+    // realistic ~2nm lane width, because real traffic (including the
+    // Dover/Calais anchorage clusters) spreads well beyond a true TSS lane
+    // and a narrow polygon just recreates the 'outside' problem (verified:
+    // narrow-lane redraw only got 'outside' to 24-38%, full-width split got
+    // it to 15-17%). Net effect: 'northern'/'southern' now mean "which half
+    // of the strait", same as the doc comment below already claimed, rather
+    // than a precise lane trace. Gates unchanged (not recalibrated this
+    // pass). See tools/export-tracks.js for the general recalibration process.
     // English Channel approach (west/southwest), the Dover-Calais narrows,
     // and the North Sea approach (east/northeast).
     roiBbox: [[50.8, 1.0], [51.5, 2.3]],
@@ -125,19 +142,21 @@ export const REGIONS = {
       east: [[2.05, 51.45], [2.05, 51.15]],
     },
     corridors: {
-      // northern ≈ English-coast-side TSS lane (England sits north of the strait)
+      // northern ≈ English-coast-side half of the strait (England sits north)
       northern: [
-        [1.15, 51.1],
-        [2.05, 51.45],
-        [2.05, 51.3],
+        [1.15, 51.5],
+        [2.05, 51.5],
+        [2.05, 51.33],
+        [1.65, 51.14],
         [1.15, 50.98],
       ],
-      // southern ≈ French/Belgian-coast-side TSS lane
+      // southern ≈ French/Belgian-coast-side half of the strait
       southern: [
         [1.15, 50.98],
-        [2.05, 51.3],
-        [2.05, 51.15],
-        [1.15, 50.85],
+        [1.65, 51.14],
+        [2.05, 51.33],
+        [2.05, 50.8],
+        [1.15, 50.8],
       ],
     },
     routeThreshold: 0.7,
@@ -152,8 +171,19 @@ export const REGIONS = {
     // separately per spec.md §4.1.1's Malacca lesson). This re-test
     // contradicts the original 2026-07-03 survey's "marginal" 2 msgs/60s
     // finding — see spec.md §4.1.1 for the corrected entry.
-    // ⚠ Placeholder ROI/gates/corridors, eyeballed from a chart — not yet
+    // ⚠ Gates are still a placeholder, eyeballed from a chart — not yet
     // calibrated against real position density.
+    // Corridors recalibrated 2026-07-09 against ~2 days of live production
+    // data (23.0k positions/394 vessels) — same method and same "outer
+    // bounds pushed to the ROI edge, not a true TSS lane width" rationale as
+    // Dover's recalibration above. Real eastbound (cog 60-100°, → Med) vs
+    // westbound (cog 240-280°, → Atlantic) traffic splits cleanly by
+    // latitude (percentile_cont on sog>3 positions in three lon bands
+    // spanning the gates); that crossover is the separator line below.
+    // Before: 27.6% of positions fell 'outside' either corridor. A
+    // realistic-lane-width redraw made this *worse* (44.2%) because real
+    // traffic disperses wider than a true lane; the full-width split got it
+    // to 23.2%.
     // Atlantic approach (west), the Tarifa/Gibraltar narrows, and the
     // Mediterranean/Alboran Sea approach (east). Spain sits north of the
     // strait, Morocco south.
@@ -165,19 +195,21 @@ export const REGIONS = {
       east: [[-5.25, 36.12], [-5.25, 35.85]],
     },
     corridors: {
-      // northern ≈ Spanish-coast-side TSS lane (Spain sits north of the strait)
+      // northern ≈ Spanish-coast-side half of the strait (Spain sits north)
       northern: [
-        [-5.65, 36.05],
-        [-5.25, 36.12],
-        [-5.25, 36.0],
-        [-5.65, 35.92],
+        [-5.65, 36.15],
+        [-5.25, 36.15],
+        [-5.25, 36.032],
+        [-5.4, 35.99],
+        [-5.65, 35.946],
       ],
-      // southern ≈ Moroccan-coast-side TSS lane
+      // southern ≈ Moroccan-coast-side half of the strait
       southern: [
-        [-5.65, 35.92],
-        [-5.25, 36.0],
-        [-5.25, 35.85],
-        [-5.65, 35.78],
+        [-5.65, 35.946],
+        [-5.4, 35.99],
+        [-5.25, 36.032],
+        [-5.25, 35.75],
+        [-5.65, 35.75],
       ],
     },
     routeThreshold: 0.7,
