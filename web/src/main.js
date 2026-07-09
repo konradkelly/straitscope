@@ -28,6 +28,16 @@ function initBanner() {
   });
 }
 
+function initChartRange(onChange) {
+  const group = document.querySelector('#chart-range');
+  group.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-days]');
+    if (!btn) return;
+    group.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    onChange(Number(btn.dataset.days));
+  });
+}
+
 function initTableToggle() {
   const btn = document.querySelector('#chart-table-toggle');
   const chart = document.querySelector('#chart');
@@ -70,9 +80,10 @@ async function loadHeadline(region) {
   }
 }
 
-async function loadChart(region) {
+async function loadChart(region, days) {
+  document.querySelector('#chart-heading').textContent = `Daily transits (${days} days)`;
   try {
-    const rows = await fetchDaily(region, 30);
+    const rows = await fetchDaily(region, days);
     renderChart(document.querySelector('#chart'), document.querySelector('#chart-table'), rows);
   } catch (err) {
     console.error('[chart] load failed', err);
@@ -103,6 +114,12 @@ initTableToggle();
 let currentRegion = localStorage.getItem(REGION_KEY);
 if (!REGIONS[currentRegion]) currentRegion = DEFAULT_REGION;
 
+let currentChartDays = 30;
+initChartRange((days) => {
+  currentChartDays = days;
+  loadChart(currentRegion, currentChartDays);
+});
+
 let liveTimer = null;
 
 function updateCoverageNote(region) {
@@ -124,7 +141,7 @@ function loadAllForRegion(map, region) {
   updateCoverageNote(region);
   updateSplitVisibility(region);
   loadHeadline(region);
-  loadChart(region);
+  loadChart(region, currentChartDays);
   loadLive(map, region);
   loadIncidents(map, region);
 

@@ -273,6 +273,29 @@ section[aria-label] > h2,
   padding: 0;
 }
 
+.range-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.range-toggle button {
+  background: var(--surface-1);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+}
+.range-toggle button:last-child {
+  border-right: none;
+}
+.range-toggle button.active {
+  background: var(--series-1);
+  color: #fff;
+}
+
 table.chart-data {
   width: 100%;
   border-collapse: collapse;

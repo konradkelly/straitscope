@@ -67,8 +67,15 @@
 
     <section id="chart-section" aria-label="Daily transit chart">
       <div class="section-head">
-        <h2>Daily transits (30 days)</h2>
-        <button id="chart-table-toggle" type="button" class="link-button">View as table</button>
+        <h2 id="chart-heading">Daily transits</h2>
+        <div class="section-controls">
+          <div class="range-toggle" id="chart-range" role="group" aria-label="Chart lookback window">
+            <button type="button" data-days="7">7d</button>
+            <button type="button" data-days="30" class="active">30d</button>
+            <button type="button" data-days="90">90d</button>
+          </div>
+          <button id="chart-table-toggle" type="button" class="link-button">View as table</button>
+        </div>
       </div>
       <div id="chart"></div>
       <div id="chart-table" hidden></div>
