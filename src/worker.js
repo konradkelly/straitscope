@@ -19,6 +19,13 @@ import { REGIONS, crossedGate } from './geo.js';
 const RUN_INTERVAL_MS = Number(process.env.WORKER_INTERVAL_MS ?? 5 * 60_000);
 const ABANDON_AFTER_H = Number(process.env.ABANDON_AFTER_HOURS ?? 48);
 const DARK_AFTER_H = Number(process.env.DARK_AFTER_HOURS ?? 6);
+// A real strait crossing takes hours, not days. A vessel that has been
+// IN_STRAIT this long is virtually never still transiting — it's anchored or
+// calling at a port inside the ROI (e.g. Algeciras Bay, Singapore's
+// anchorages) and will likely never reach the opposite gate. ABANDON_AFTER_H
+// alone never catches these because they keep transmitting positions (just
+// not toward a gate), so they'd otherwise sit in transit_state forever.
+const MAX_IN_STRAIT_H = Number(process.env.MAX_IN_STRAIT_HOURS ?? 72);
 
 /**
  * Classify a completed transit's route within its region. Regions without
@@ -118,16 +125,24 @@ export function applyPosition(state, position) {
 /**
  * Decide whether an IN_STRAIT vessel that produced no new positions this
  * pass should be abandoned (spec §6.2) or flagged dark (spec §6.4), based on
- * wall-clock silence since its last known position.
- * @param {{last_time: Date, last_sog: number|null, dark_flagged: boolean}} row
+ * wall-clock silence since its last known position — or abandoned regardless
+ * of silence if it's been IN_STRAIT far longer than any real transit takes
+ * (spec §6.1 addendum: anchorage/port-calling traffic, not a detector bug).
+ * @param {{last_time: Date, last_sog: number|null, dark_flagged: boolean, entered_at: Date|null}} row
  * @param {Date} now
- * @param {{abandonAfterH: number, darkAfterH: number}} thresholds
+ * @param {{abandonAfterH: number, darkAfterH: number, maxInStraitH?: number}} thresholds
  * @returns {{abandon: boolean, dark: boolean}}
  */
-export function checkStaleness(row, now, { abandonAfterH, darkAfterH }) {
+export function checkStaleness(row, now, { abandonAfterH, darkAfterH, maxInStraitH }) {
   const silentMs = now - new Date(row.last_time);
   if (silentMs > abandonAfterH * 3600_000) {
     return { abandon: true, dark: false };
+  }
+  if (maxInStraitH != null && row.entered_at != null) {
+    const inStraitMs = now - new Date(row.entered_at);
+    if (inStraitMs > maxInStraitH * 3600_000) {
+      return { abandon: true, dark: false };
+    }
   }
   if (!row.dark_flagged && row.last_sog > 1 && silentMs > darkAfterH * 3600_000) {
     return { abandon: false, dark: true };
@@ -223,7 +238,7 @@ async function pass() {
     // that has gone permanently quiet and will never produce another
     // position to trigger the per-position checks above.
     const { rows: staleRows } = await client.query(
-      `SELECT region, mmsi, last_time, last_sog, dark_flagged FROM transit_state
+      `SELECT region, mmsi, last_time, last_sog, dark_flagged, entered_at FROM transit_state
        WHERE state = 'IN_STRAIT' AND last_time IS NOT NULL AND last_time <= $1`,
       [to]
     );
@@ -232,6 +247,7 @@ async function pass() {
       const { abandon, dark } = checkStaleness(row, to, {
         abandonAfterH: ABANDON_AFTER_H,
         darkAfterH: DARK_AFTER_H,
+        maxInStraitH: MAX_IN_STRAIT_H,
       });
       if (abandon) {
         await client.query(

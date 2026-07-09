@@ -137,7 +137,15 @@ export const REGIONS = {
     roiBbox: [[50.8, 1.0], [51.5, 2.3]],
     gates: {
       // Channel side, off Folkestone/Boulogne — west of the narrows.
-      west: [[1.15, 51.1], [1.15, 50.85]],
+      // Recalibrated 2026-07-09: real moving traffic (sog>3) at this
+      // longitude spans lat 50.83-51.49 (p10-p90), but the original gate
+      // only reached 51.10 — missing everything north of it, which is most
+      // of the lane. That's why outbound (enter west, exit east) transits
+      // were showing up as exactly zero while inbound wasn't: crossings
+      // into the strait via this gate were geometrically invisible for the
+      // bulk of real traffic. Extended to just inside the ROI's own
+      // northern edge (51.49) to match. See spec.md §6.1 addendum.
+      west: [[1.15, 51.49], [1.15, 50.85]],
       // North Sea side, off North Foreland/the Belgian coast — east of the narrows.
       east: [[2.05, 51.45], [2.05, 51.15]],
     },

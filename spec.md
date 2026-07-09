@@ -4,7 +4,7 @@ Real-time monitoring dashboard for vessel traffic through global maritime chokep
 
 **Author:** Konrad Kelly
 **Status:** Draft v1
-**Last updated:** 2026-07-07
+**Last updated:** 2026-07-09
 
 ---
 
@@ -210,20 +210,35 @@ Current gate definitions:
 |---|---|---|
 | Hormuz | (26.55°N, 55.70°E) → (25.90°N, 55.70°E) — Persian Gulf side | (26.10°N, 57.10°E) → (25.30°N, 57.10°E) — Gulf of Oman side |
 | Singapore | (1.28°N, 103.75°E) → (1.05°N, 103.75°E) — near Raffles Lighthouse, Malacca Strait transition | (1.35°N, 103.99°E) → (1.15°N, 103.99°E) — recalibrated 2026-07-06, see below |
-| Dover | (51.10°N, 1.15°E) → (50.85°N, 1.15°E) — Channel side, off Folkestone/Boulogne | (51.45°N, 2.05°E) → (51.15°N, 2.05°E) — North Sea side, off North Foreland/the Belgian coast |
+| Dover | (51.49°N, 1.15°E) → (50.85°N, 1.15°E) — Channel side, off Folkestone/Boulogne — recalibrated 2026-07-09, see below | (51.45°N, 2.05°E) → (51.15°N, 2.05°E) — North Sea side, off North Foreland/the Belgian coast |
 | Gibraltar | (36.05°N, 5.65°W) → (35.78°N, 5.65°W) — Atlantic side, off Tarifa/Tangier | (36.12°N, 5.25°W) → (35.85°N, 5.25°W) — Mediterranean side, off Gibraltar/Ceuta |
 | Öresund | (56.10°N, 12.55°E) → (56.10°N, 12.85°E) — north gate, Helsingør/Helsingborg narrows (named `west` per the worker.js gate-key convention — see below) | (55.50°N, 12.55°E) → (55.50°N, 12.95°E) — south gate, Copenhagen/Malmö narrows (named `east`) |
 
-> Hormuz's gate coordinates remain engineering placeholders (uncalibratable while its terrestrial AIS coverage is zero — §4.1.1). Singapore's were calibrated 2026-07-06 against ~27 hours of live position data after launch showed 0 completed transits despite ~100 dark-vessel flags/day: the west gate (103.75°E) was already sitting right at the real density cliff (~1k positions/day just west of it vs. ~8k+ just east) and needed no change, but the original east gate (104.10°E, near Horsburgh Lighthouse) sat past where terrestrial coverage effectively ends — position density falls off a cliff after 103.75-104.00°E (789 positions/36 vessels in 103.95-104.00 vs. 92 in 104.00-104.05 and 2 total past 104.10) — so the "opposite crossing" a transit needs was almost never observable. Moved to 103.99°E, inside the well-covered band; the existing lat range already covered the observed traffic spread there, so it was left unchanged. Dover, Gibraltar, and Öresund's gates are all still engineering placeholders, eyeballed from a chart — none has been calibrated against real position density the way Singapore's were (§6.1's italicized warning at the top of `geo.js` applies).
+> Hormuz's gate coordinates remain engineering placeholders (uncalibratable while its terrestrial AIS coverage is zero — §4.1.1). Singapore's were calibrated 2026-07-06 against ~27 hours of live position data after launch showed 0 completed transits despite ~100 dark-vessel flags/day: the west gate (103.75°E) was already sitting right at the real density cliff (~1k positions/day just west of it vs. ~8k+ just east) and needed no change, but the original east gate (104.10°E, near Horsburgh Lighthouse) sat past where terrestrial coverage effectively ends — position density falls off a cliff after 103.75-104.00°E (789 positions/36 vessels in 103.95-104.00 vs. 92 in 104.00-104.05 and 2 total past 104.10) — so the "opposite crossing" a transit needs was almost never observable. Moved to 103.99°E, inside the well-covered band; the existing lat range already covered the observed traffic spread there, so it was left unchanged. Gibraltar and Öresund's gates are still engineering placeholders, eyeballed from a chart — not yet calibrated against real position density the way Singapore's were (§6.1's italicized warning at the top of `geo.js` applies).
 >
 > Öresund is the only configured region whose strait runs north-south rather than east-west; its `west`/`east` gate keys are a naming convention only (required by `worker.js`'s hardcoded direction logic, §6.2), not a compass direction — `west` is physically the north gate, `east` is physically the south gate.
+
+#### 6.1 addendum (2026-07-09): investigating low daily transit counts
+
+Prompted by daily transit counts across every live region (roughly 9-17/day) looking low against published shipping-volume figures for these chokepoints, and by Dover specifically showing 34 inbound transits but **zero** outbound over 7 days. Queried production directly (`transit_state`, `vessel_positions`) rather than guessing:
+
+- **`transit_state` is heavily backed up**: 28-41% of all tracked vessels sit in `IN_STRAIT`, some for 3+ days (dover 223/687 IDLE+IN_STRAIT rows IN_STRAIT, gibraltar 171/415, oresund 59/210, singapore 282/1732). A real crossing takes hours; multi-day `IN_STRAIT` means a vessel entered the ROI and never reached the opposite gate.
+- **Most of that backlog is real traffic that was never going to complete a transit**, not a detector bug: position density inside the ROIs clusters heavily around known anchorage/port-calling areas (Algeciras Bay's bunkering anchorage sits between Gibraltar's two gates; Singapore's anchorages likewise) — vessels calling there correctly never finish a gate-to-gate passage. `checkStaleness` only ever fired on *silence* (`ABANDON_AFTER_HOURS`), and anchored vessels keep transmitting, so they accumulated in `transit_state` forever instead of ever being retired.
+- **Dover's zero-outbound was a separate, genuine gate-placement bug.** Comparing each gate's longitude against the lat spread of real *moving* traffic (`sog > 3`) there: the east gate (51.15-51.45°N) covered the observed spread (51.05-51.42°N) well, but the west gate only reached 51.10°N against observed traffic running up to 51.49°N — missing the entire northern (and busier) part of the lane. Since outbound transits require a west-gate *entry*, and most real crossings there were geometrically invisible to that gate, outbound was structurally forced to ~zero regardless of how much real traffic there was. Fixed by extending the west gate to 50.85-51.49°N (`src/geo.js`).
+
+**Changes made:**
+1. Dover west gate extended to match observed traffic (above).
+2. Added an age-based abandonment path (`worker.js` `checkStaleness`, `MAX_IN_STRAIT_HOURS`, default 72h): a vessel `IN_STRAIT` for longer than that is abandoned regardless of silence, so anchorage/port-calling traffic no longer accumulates in `transit_state` indefinitely. This does not create phantom transits — abandonment never records one — it only stops the backlog from growing forever.
+
+**Not fixed / still open:** Gibraltar and Singapore's low completion *rate* is largely real (anchorage traffic is a genuine majority of ROI contacts, not a bug to fix), so daily transit counts there will likely remain a fraction of total AIS contacts even after this change — see §11 for the broader "counts are estimates, not shipping volume" framing. Gibraltar's and Öresund's gates still haven't been checked against real traffic the way Dover's just was; worth the same lat-spread-vs-gate-segment check next time daily counts look suspicious.
 
 ### 6.2 Transit state machine (per `(region, mmsi)`)
 
 ```
 IDLE ──cross west gate──► IN_STRAIT(expect=east)  ──cross east gate──► TRANSIT(outbound) → IDLE
 IDLE ──cross east gate──► IN_STRAIT(expect=west) ──cross west gate──► TRANSIT(inbound)  → IDLE
-IN_STRAIT ──no positions for 48 h── ► ABANDONED → IDLE   (vessel dark or anchored; no transit recorded)
+IN_STRAIT ──no positions for 48 h (ABANDON_AFTER_HOURS)── ► ABANDONED → IDLE   (vessel dark or gone silent; no transit recorded)
+IN_STRAIT ──still IN_STRAIT after 72 h (MAX_IN_STRAIT_HOURS), even if still transmitting── ► ABANDONED → IDLE   (added 2026-07-09, §6.1 addendum: anchored/port-calling traffic, not a real transit)
 IN_STRAIT ──re-cross same gate──► IDLE            (turned back; no transit recorded)
 ```
 

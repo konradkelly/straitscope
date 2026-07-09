@@ -48,20 +48,33 @@ npm test
 
 ## Before launch (do not skip)
 
-- [ ] **Calibrate geometry** — the gate lines and corridor polygons in
-   `src/geo.js` are placeholders (this is why the map's corridor overlays
-   currently spill onto land in places). Collect a few days of positions,
-   then run `npm run export-tracks -- 3 tracks > tracks.geojson` and paste
-   the result into [geojson.io](https://geojson.io) to see where vessels
-   actually travel; redraw `GATES`/`CORRIDORS` in `src/geo.js` to match.
-   Spec §6 explains why this matters.
+- [ ] **Calibrate geometry** — partially done. Singapore's gates and Dover's
+   gates + Dover/Gibraltar's corridors are calibrated against live position
+   data (spec §6.1/§6.3 and their addenda); Gibraltar's and Öresund's gates
+   are still eyeballed placeholders, and Hormuz can't be calibrated at all
+   while its terrestrial AIS coverage stays at zero (spec §4.1.1). Collect a
+   few days of positions, then run `npm run export-tracks -- 3 tracks >
+   tracks.geojson` and paste the result into
+   [geojson.io](https://geojson.io) to see where vessels actually travel;
+   redraw `GATES`/`CORRIDORS` in `src/geo.js` to match. Spec §6 explains why
+   this matters.
 - [x] Add the not-for-navigation disclaimer to the frontend (spec §8).
-- [ ] Sanity-check daily transit counts against published figures.
+- [ ] Sanity-check daily transit counts against published figures. (Spec
+   §6.1 addendum found and partly explained why counts run low — a lot of
+   ROI traffic is anchorage/port-calling, not through-transit — but the
+   figures haven't been checked against a published source yet.)
+- [ ] Curate real entries in `data/incidents.yaml` — currently empty
+   (example only), so the incident timeline renders nothing live.
+- [ ] Wire up the nightly `pg_dump` → S3 backup (spec §9) — the S3 bucket
+   and IAM policy exist in Terraform, but nothing runs the dump yet.
 
 ## Roadmap
 
 - [x] M1 Ingest + schema
 - [x] M2 Transit detection + dark-vessel detection, unit tested (calibration soak still needed)
-- [x] M3 API (`src/api.js`) + map frontend (`web/`) ← you are here (not yet deployed behind a domain/TLS)
-- [ ] M4 Terraform + GitHub Actions + monitoring
-- [ ] M5 Launch
+- [x] M3 API (`src/api.js`) + map frontend (`web/`), deployed behind a domain + TLS
+- [x] M4 Terraform + GitHub Actions — monitoring is still just external (UptimeRobot-style, not in repo) and backups aren't wired up yet (see above)
+- [ ] M5 Launch (methodology page, public announcement)
+- [x] M6 Multi-region refactor; Singapore Strait added as region #2 (done 2026-07-04)
+- [x] M7 Dover Strait added as region #3 (done 2026-07-06)
+- [x] M8 Gibraltar and Öresund added as regions #4/#5; Taiwan Strait evaluated and rejected (done 2026-07-07)

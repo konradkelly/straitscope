@@ -184,3 +184,30 @@ test('checkStaleness: silent past abandon threshold takes priority over dark', (
     { abandon: true, dark: false }
   );
 });
+
+test('checkStaleness: no maxInStraitH configured never abandons on age alone', () => {
+  const now = new Date('2026-07-10T12:00:00Z');
+  const row = { last_time: new Date('2026-07-10T11:58:00Z'), last_sog: 0, dark_flagged: false, entered_at: new Date('2026-07-01T00:00:00Z') };
+  assert.deepEqual(
+    checkStaleness(row, now, { abandonAfterH: 48, darkAfterH: 6 }),
+    { abandon: false, dark: false }
+  );
+});
+
+test('checkStaleness: IN_STRAIT far longer than maxInStraitH is abandoned even while still transmitting (anchored/port-calling traffic)', () => {
+  const now = new Date('2026-07-10T12:00:00Z');
+  const row = { last_time: new Date('2026-07-10T11:58:00Z'), last_sog: 0, dark_flagged: false, entered_at: new Date('2026-07-01T00:00:00Z') };
+  assert.deepEqual(
+    checkStaleness(row, now, { abandonAfterH: 48, darkAfterH: 6, maxInStraitH: 72 }),
+    { abandon: true, dark: false }
+  );
+});
+
+test('checkStaleness: within maxInStraitH is not abandoned on age', () => {
+  const now = new Date('2026-07-10T12:00:00Z');
+  const row = { last_time: new Date('2026-07-10T11:58:00Z'), last_sog: 10, dark_flagged: false, entered_at: new Date('2026-07-09T00:00:00Z') };
+  assert.deepEqual(
+    checkStaleness(row, now, { abandonAfterH: 48, darkAfterH: 6, maxInStraitH: 72 }),
+    { abandon: false, dark: false }
+  );
+});
