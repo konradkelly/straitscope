@@ -29,6 +29,9 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -125,7 +128,7 @@ jobs:
               ("echo " + ($token | @sh) + " | docker login ghcr.io -u " + $actor + " --password-stdin"),
               ("export IMAGE_TAG=" + $tag),
               "docker compose -f docker-compose.prod.yml pull",
-              "docker compose -f docker-compose.prod.yml up -d",
+              "docker compose -f docker-compose.prod.yml up -d --remove-orphans",
               "docker image prune -f"
             ]')
 
